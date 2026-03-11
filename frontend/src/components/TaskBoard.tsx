@@ -27,8 +27,6 @@ type TaskBoardProps = {
 
 export function TaskBoard({ workflow, onTaskUpdate, onRefresh }: TaskBoardProps) {
   const [draggedTask, setDraggedTask] = useState<Task | null>(null);
-  const [aiPrompt, setAiPrompt] = useState("");
-  const [aiLoading, setAiLoading] = useState(false);
 
   const allTasks = workflow.steps.flatMap((s) => s.tasks);
 
@@ -39,19 +37,6 @@ export function TaskBoard({ workflow, onTaskUpdate, onRefresh }: TaskBoardProps)
     if (!draggedTask || draggedTask.status === status) return;
     onTaskUpdate(draggedTask.id, { status });
     setDraggedTask(null);
-  };
-
-  const handleAiAssistant = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!aiPrompt.trim()) return;
-    setAiLoading(true);
-    try {
-      await api.workflows.aiAssistant(workflow.id, aiPrompt.trim());
-      onRefresh();
-      setAiPrompt("");
-    } finally {
-      setAiLoading(false);
-    }
   };
 
   return (
@@ -101,26 +86,6 @@ export function TaskBoard({ workflow, onTaskUpdate, onRefresh }: TaskBoardProps)
             </div>
           );
         })}
-      </div>
-
-      <div className="rounded bg-[#1E3A5F] border border-[#253858] p-4">
-        <h3 className="text-[11px] font-semibold uppercase tracking-wider text-muted mb-1">AI Assistant</h3>
-        <p className="text-muted text-xs mb-3">
-          Ask the AI to add phases or tasks, e.g. &quot;Add testing steps&quot; or &quot;Add a deployment phase&quot;.
-        </p>
-        <form onSubmit={handleAiAssistant} className="flex gap-2">
-          <input
-            type="text"
-            value={aiPrompt}
-            onChange={(e) => setAiPrompt(e.target.value)}
-            className="input-field flex-1"
-            placeholder="Add testing steps"
-            disabled={aiLoading}
-          />
-          <button type="submit" disabled={aiLoading} className="btn-primary whitespace-nowrap">
-            {aiLoading ? "Adding..." : "Apply"}
-          </button>
-        </form>
       </div>
     </div>
   );

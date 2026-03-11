@@ -42,7 +42,10 @@ def root():
 
 @app.get("/api/health")
 def health():
-    return {"status": "ok"}
+    return {
+        "status": "ok",
+        "openai_configured": bool(settings.openai_api_key and settings.openai_api_key.strip()),
+    }
 
 
 app.include_router(auth.router, prefix="/api")

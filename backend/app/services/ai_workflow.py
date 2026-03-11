@@ -92,17 +92,17 @@ Current phases (summary): {current_phases_summary}
 User request: {prompt}
 
 Respond with a valid JSON object only. Format:
-{
+{{
   "phases": [
-    {
+    {{
       "title": "Phase name",
       "order": number,
       "tasks": [
-        { "title": "Task title", "description": "Brief description" }
+        {{ "title": "Task title", "description": "Brief description" }}
       ]
-    }
+    }}
   ]
-}
+}}
 Only include NEW phases or new tasks to add. Use order values that fit into the existing workflow. If the user asks to add testing steps, add a phase or tasks for testing."""
 
     try:

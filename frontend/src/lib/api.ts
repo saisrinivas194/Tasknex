@@ -65,8 +65,9 @@ async function request<T>(
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
     if (msg === "Failed to fetch" || e instanceof TypeError) {
+      const base = API_BASE.replace(/\/api\/?$/, "") || "http://localhost:8000";
       throw new Error(
-        "Cannot reach the server. Make sure the backend is running (e.g. uvicorn on port 8000) and that the API URL is correct."
+        `Cannot reach the server at ${base}. Check: (1) Backend is running (e.g. uvicorn on port 8000). (2) API URL is correct — set NEXT_PUBLIC_API_URL to your backend URL + /api (e.g. https://your-backend.up.railway.app/api).`
       );
     }
     throw e;
