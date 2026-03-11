@@ -1,0 +1,39 @@
+# Dependencies and build
+backend/venv/
+backend/.venv/
+frontend/node_modules/
+frontend/.next/
+frontend/out/
+
+# Environment (never commit secrets)
+.env
+.env.local
+.env.*.local
+backend/.env
+frontend/.env.local
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+.eggs/
+dist/
+build/
+
+# IDE and OS
+.idea/
+.vscode/
+*.swp
+.DS_Store
+*.log
+
+# Debug and test
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Optional: keep migrations in repo; uncomment to ignore
+# backend/migrations/
