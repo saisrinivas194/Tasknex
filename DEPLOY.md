@@ -117,7 +117,10 @@ You need the backend to use the Postgres database you added in step 1.
 
 1. In the **backend service**, open **Settings** → **Networking** (or **"Generate domain"**).
 2. Click **"Generate domain"** (or **"Add domain"**). Railway will give you a URL like `https://your-service-name.up.railway.app`.
-3. **Copy this URL.** The frontend will need: **this URL + `/api`** (e.g. `https://your-service-name.up.railway.app/api`).
+3. **Copy this URL.** Use it as follows:
+   - **Root:** `https://your-service-name.up.railway.app` → returns a short API message.
+   - **Health check:** `https://your-service-name.up.railway.app/api/health` → should return `{"status":"ok"}`.
+   - **Frontend API base URL:** use **this URL + `/api`** (e.g. `https://your-service-name.up.railway.app/api`). Do not add `/api` twice.
 
 After saving Variables and Root Directory, Railway will redeploy. Wait for the build to finish and the deployment to be **Success** (green). Then you can open the generated URL; e.g. `https://your-backend.up.railway.app/api/health` should return `{"status":"ok"}`.
 

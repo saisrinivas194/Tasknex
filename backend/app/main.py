@@ -35,6 +35,11 @@ app.add_middleware(
     expose_headers=["*"],
 )
 
+@app.get("/")
+def root():
+    return {"message": "Tasknex API", "docs": "/docs", "health": "/api/health"}
+
+
 @app.get("/api/health")
 def health():
     return {"status": "ok"}
