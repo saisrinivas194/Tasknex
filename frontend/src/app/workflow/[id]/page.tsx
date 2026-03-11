@@ -149,6 +149,7 @@ export default function WorkflowPage() {
   }
 
   function handleDeleteWorkflow() {
+    if (!workflow) return;
     if (!confirm("Delete this workflow? This cannot be undone.")) return;
     api.workflows
       .delete(workflow.id)
