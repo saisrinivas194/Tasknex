@@ -55,33 +55,35 @@ export function TaskBoard({ workflow, onTaskUpdate, onRefresh }: TaskBoardProps)
   };
 
   return (
-    <div className="max-w-6xl mx-auto space-y-6">
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+    <div className="max-w-6xl mx-auto space-y-4">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
         {COLUMNS.map((col) => {
           const tasks = allTasks.filter((t) => t.status === col.status);
           return (
             <div
               key={col.status}
-              className="card p-4 min-h-[280px] flex flex-col"
+              className="rounded bg-[#1E3A5F] border border-[#253858] p-3 min-h-[280px] flex flex-col"
               onDragOver={(e) => e.preventDefault()}
               onDrop={() => handleDrop(col.status)}
             >
-              <h2 className="font-semibold text-slate-200 mb-3 flex items-center gap-2">
-                <span
-                  className={`w-2 h-2 rounded-full ${
-                    col.status === "planned"
-                      ? "bg-slate-500"
-                      : col.status === "in_progress"
-                      ? "bg-blue-500"
-                      : "bg-success"
-                  }`}
-                />
-                {col.label}
-                <span className="text-slate-500 text-sm font-normal">
-                  ({tasks.length})
+              <h2 className="text-[11px] font-semibold uppercase tracking-wider text-muted mb-2 flex items-center justify-between">
+                <span className="flex items-center gap-1.5">
+                  <span
+                    className={`w-1.5 h-1.5 rounded-full ${
+                      col.status === "planned"
+                        ? "bg-slate-500"
+                        : col.status === "in_progress"
+                        ? "bg-primary-400"
+                        : "bg-success"
+                    }`}
+                  />
+                  {col.label}
+                </span>
+                <span className="badge bg-[#253858] text-muted font-normal">
+                  {tasks.length}
                 </span>
               </h2>
-              <div className="flex-1 space-y-2 overflow-auto">
+              <div className="flex-1 space-y-2 overflow-auto min-h-0">
                 {tasks.map((task) => (
                   <TaskCard
                     key={task.id}
@@ -101,9 +103,9 @@ export function TaskBoard({ workflow, onTaskUpdate, onRefresh }: TaskBoardProps)
         })}
       </div>
 
-      <div className="card p-4">
-        <h3 className="font-medium text-slate-200 mb-2">AI Assistant</h3>
-        <p className="text-slate-400 text-sm mb-3">
+      <div className="rounded bg-[#1E3A5F] border border-[#253858] p-4">
+        <h3 className="text-[11px] font-semibold uppercase tracking-wider text-muted mb-1">AI Assistant</h3>
+        <p className="text-muted text-xs mb-3">
           Ask the AI to add phases or tasks, e.g. &quot;Add testing steps&quot; or &quot;Add a deployment phase&quot;.
         </p>
         <form onSubmit={handleAiAssistant} className="flex gap-2">

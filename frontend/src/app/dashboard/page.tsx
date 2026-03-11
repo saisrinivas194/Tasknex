@@ -89,17 +89,17 @@ export default function DashboardPage() {
       <Sidebar userEmail={user.email} onLogout={logout} />
       <main className="flex-1 min-h-0 p-8 overflow-auto">
         <div className="max-w-5xl mx-auto">
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-8">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
             <div>
-              <h1 className="text-2xl font-bold text-white tracking-tight">
-                Dashboard
+              <h1 className="text-xl font-semibold text-white tracking-tight">
+                Workflows
               </h1>
               <p className="text-muted text-sm mt-0.5">
-                Manage workflows and track progress
+                Your projects and progress
               </p>
             </div>
-            <Link href="/dashboard/new" className="btn-primary w-fit shrink-0">
-              New workflow
+            <Link href="/dashboard/new" className="btn-primary w-fit shrink-0 text-sm">
+              Create
             </Link>
           </div>
 
@@ -153,7 +153,7 @@ export default function DashboardPage() {
               </button>
             </div>
           ) : (
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
               {filtered.map((w) => {
                 const pct =
                   w.total_tasks > 0
@@ -162,39 +162,42 @@ export default function DashboardPage() {
                 return (
                   <div
                     key={w.id}
-                    className="card p-5 hover:bg-navy-panel/50 transition relative group"
+                    className="card p-4 hover:bg-[#253858] transition relative group border border-[#253858]"
                   >
                     <Link href={`/workflow/${w.id}`} className="block">
-                      <h2 className="font-semibold text-white truncate pr-16">
+                      <div className="flex items-start justify-between gap-2">
+                        <span className="text-[11px] font-medium text-muted uppercase tracking-wide">
+                          WF-{w.id}
+                        </span>
+                        <span className="badge bg-primary/20 text-primary-200 text-[10px]">
+                          {w.completed_tasks}/{w.total_tasks}
+                        </span>
+                      </div>
+                      <h2 className="font-semibold text-white text-sm mt-1 truncate pr-14">
                         {w.title}
                       </h2>
-                      <p className="text-muted text-sm mt-1 line-clamp-2">
+                      <p className="text-muted text-xs mt-0.5 line-clamp-2">
                         {w.goal}
                       </p>
-                      <div className="mt-4 flex items-center justify-between text-sm">
-                        <span className="text-muted">
-                          {w.completed_tasks}/{w.total_tasks} tasks
-                        </span>
-                        <div className="w-20 h-2 rounded-full bg-slate-700 overflow-hidden">
-                          <div
-                            className="h-full bg-success rounded-full transition-all"
-                            style={{ width: `${pct}%` }}
-                          />
-                        </div>
+                      <div className="mt-3 h-1.5 w-full rounded-full bg-[#253858] overflow-hidden">
+                        <div
+                          className="h-full bg-success rounded-full transition-all"
+                          style={{ width: `${pct}%` }}
+                        />
                       </div>
-                      <p className="text-muted text-xs mt-2">
+                      <p className="text-muted text-[11px] mt-2">
                         {new Date(w.created_at).toLocaleDateString()}
                       </p>
                     </Link>
                     <div
-                      className="absolute top-3 right-3 flex gap-1 opacity-0 group-hover:opacity-100 transition"
+                      className="absolute top-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition"
                       onClick={(e) => e.preventDefault()}
                     >
                       <button
                         type="button"
                         onClick={(e) => handleDuplicate(e, w.id)}
                         disabled={duplicatingId === w.id}
-                        className="p-1.5 rounded bg-slate-600 hover:bg-slate-500 text-slate-300 text-xs disabled:opacity-50"
+                        className="p-1.5 rounded bg-[#253858] hover:bg-[#344563] text-slate-300 text-xs disabled:opacity-50"
                         title="Duplicate"
                       >
                         {duplicatingId === w.id ? "…" : "Copy"}
@@ -203,7 +206,7 @@ export default function DashboardPage() {
                         type="button"
                         onClick={(e) => handleDelete(e, w.id)}
                         disabled={deletingId === w.id}
-                        className="p-1.5 rounded bg-slate-600 hover:bg-red-500/20 text-red-400 text-xs disabled:opacity-50"
+                        className="p-1.5 rounded bg-[#253858] hover:bg-red-500/20 text-red-400 text-xs disabled:opacity-50"
                         title="Delete"
                       >
                         {deletingId === w.id ? "…" : "Delete"}

@@ -10,10 +10,16 @@ const PRIORITY_LABELS: Record<TaskPriority, string> = {
   critical: "Critical",
 };
 const PRIORITY_CLASSES: Record<TaskPriority, string> = {
-  low: "bg-slate-500/80 text-slate-200",
-  medium: "bg-blue-500/80 text-white",
-  high: "bg-amber-500/80 text-white",
-  critical: "bg-red-500/80 text-white",
+  low: "bg-[#97A0AF]/90 text-slate-900",
+  medium: "bg-primary/90 text-white",
+  high: "bg-[#FF8B00]/90 text-white",
+  critical: "bg-[#DE350B]/90 text-white",
+};
+const PRIORITY_BORDER: Record<TaskPriority, string> = {
+  low: "card-issue-priority-low",
+  medium: "card-issue-priority-medium",
+  high: "card-issue-priority-high",
+  critical: "card-issue-priority-critical",
 };
 
 function formatDueDate(iso: string | null | undefined): string {
@@ -63,12 +69,13 @@ export function TaskCard({ task, workflowId, onDragStart, onDragEnd, onUpdate, o
     setEditing(false);
   };
 
+  const taskPriority = (task.priority as TaskPriority) ?? "medium";
   return (
     <div
       draggable
       onDragStart={onDragStart}
       onDragEnd={onDragEnd}
-      className="bg-slate-700/60 rounded-lg p-3 border border-slate-600 cursor-grab active:cursor-grabbing hover:border-slate-500 transition"
+      className={`card card-issue rounded bg-[#253858] p-2.5 border border-[#344563] cursor-grab active:cursor-grabbing hover:border-[#4C9AFF]/50 transition ${PRIORITY_BORDER[taskPriority]}`}
     >
       {editing ? (
         <div className="space-y-2" onClick={(e) => e.stopPropagation()}>
@@ -152,14 +159,15 @@ export function TaskCard({ task, workflowId, onDragStart, onDragEnd, onUpdate, o
       ) : (
         <>
           <div className="flex items-start justify-between gap-2">
-            <p className="text-slate-100 font-medium text-sm flex-1 min-w-0">{task.title}</p>
+            <span className="text-[10px] font-medium text-muted shrink-0">TASK-{task.id}</span>
             <span
-              className={`shrink-0 text-[10px] font-medium px-1.5 py-0.5 rounded ${PRIORITY_CLASSES[(task.priority as TaskPriority) ?? "medium"]}`}
+              className={`badge shrink-0 ${PRIORITY_CLASSES[taskPriority]}`}
               title="Priority"
             >
-              {PRIORITY_LABELS[(task.priority as TaskPriority) ?? "medium"]}
+              {PRIORITY_LABELS[taskPriority]}
             </span>
           </div>
+          <p className="text-slate-100 font-medium text-sm mt-0.5 flex-1 min-w-0">{task.title}</p>
           {task.description && (
             <p className="text-muted text-xs mt-1 line-clamp-2">{task.description}</p>
           )}
@@ -173,7 +181,7 @@ export function TaskCard({ task, workflowId, onDragStart, onDragEnd, onUpdate, o
               {(task.labels ?? []).map((l) => (
                 <span
                   key={l}
-                  className="text-[10px] px-1.5 py-0.5 rounded bg-slate-600 text-slate-300"
+                  className="badge bg-[#344563] text-slate-300"
                 >
                   {l}
                 </span>
@@ -199,7 +207,7 @@ export function TaskCard({ task, workflowId, onDragStart, onDragEnd, onUpdate, o
                 onUpdate({ status: e.target.value as TaskStatus });
               }}
               onClick={(e) => e.stopPropagation()}
-              className="bg-slate-600 border border-slate-500 rounded text-xs text-slate-200 px-2 py-0.5"
+              className="bg-[#1E3A5F] border border-[#344563] rounded text-xs text-slate-200 px-2 py-0.5"
             >
               <option value="planned">Planned</option>
               <option value="in_progress">In progress</option>

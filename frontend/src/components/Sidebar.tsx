@@ -5,8 +5,8 @@ import { usePathname } from "next/navigation";
 import { Logo } from "./Logo";
 
 const nav = [
-  { href: "/dashboard", label: "Dashboard" },
-  { href: "/dashboard/new", label: "AI Generator" },
+  { href: "/dashboard", label: "Workflows", icon: "M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" },
+  { href: "/dashboard/new", label: "Create with AI", icon: "M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" },
 ];
 
 export function Sidebar({
@@ -19,27 +19,33 @@ export function Sidebar({
   const pathname = usePathname();
 
   return (
-    <aside className="w-56 shrink-0 h-screen flex flex-col border-r border-slate-700/80 bg-navy-card/50 overflow-y-auto">
-      <div className="p-5 border-b border-slate-700/80">
+    <aside className="w-60 shrink-0 h-screen flex flex-col border-r border-[#253858] bg-[#0D1424] overflow-y-auto">
+      <div className="p-4 border-b border-[#253858]">
         <Logo />
         <p className="text-muted text-xs mt-1.5">
           Goals → Workflows → Done
         </p>
       </div>
-      <nav className="p-3 flex-1">
-        <ul className="space-y-0.5">
-          {nav.map(({ href, label }) => {
+      <nav className="p-2 flex-1">
+        <p className="px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wider text-muted">
+          Projects
+        </p>
+        <ul className="space-y-0.5 mt-1">
+          {nav.map(({ href, label, icon }) => {
             const active = pathname === href || (href !== "/dashboard" && pathname.startsWith(href));
             return (
               <li key={href}>
                 <Link
                   href={href}
-                  className={`block px-3 py-2 rounded-lg text-sm font-medium transition ${
+                  className={`flex items-center gap-3 px-3 py-2 rounded text-sm font-medium transition ${
                     active
-                      ? "bg-primary/15 text-primary"
-                      : "text-slate-300 hover:bg-slate-700/50 hover:text-white"
+                      ? "bg-primary/20 text-primary-200"
+                      : "text-slate-300 hover:bg-[#253858] hover:text-white"
                   }`}
                 >
+                  <svg className="w-5 h-5 shrink-0 opacity-80" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={icon} />
+                  </svg>
                   {label}
                 </Link>
               </li>
@@ -47,13 +53,13 @@ export function Sidebar({
           })}
         </ul>
       </nav>
-      <div className="p-3 border-t border-slate-700/80 space-y-2">
+      <div className="p-3 border-t border-[#253858] space-y-2">
         <p className="text-muted text-xs px-3 truncate" title={userEmail}>
           {userEmail}
         </p>
         <button
           onClick={onLogout}
-          className="w-full text-left px-3 py-2 rounded-lg text-sm text-slate-400 hover:bg-slate-700/50 hover:text-white transition"
+          className="w-full text-left px-3 py-2 rounded text-sm text-slate-400 hover:bg-[#253858] hover:text-white transition"
         >
           Sign out
         </button>

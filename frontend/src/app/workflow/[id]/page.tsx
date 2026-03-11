@@ -183,39 +183,48 @@ export default function WorkflowPage() {
       <Sidebar userEmail={user.email} onLogout={logout} />
       <main className="flex-1 min-h-0 p-8 overflow-auto">
         <div className="max-w-6xl mx-auto">
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-4">
             <div className="min-w-0">
-              <Link href="/dashboard" className="text-muted hover:text-white text-sm">
-                ← Dashboard
-              </Link>
-              <h1 className="text-xl font-semibold text-white truncate mt-0.5">
+              <nav className="flex items-center gap-1 text-xs text-muted">
+                <Link href="/dashboard" className="hover:text-white transition">
+                  Workflows
+                </Link>
+                <span aria-hidden>/</span>
+                <span className="text-white truncate max-w-[200px] sm:max-w-[320px]">
+                  {workflow.title}
+                </span>
+              </nav>
+              <h1 className="text-lg font-semibold text-white truncate mt-0.5 flex items-center gap-2">
+                <span className="text-[11px] font-medium text-muted uppercase tracking-wide shrink-0">
+                  WF-{workflow.id}
+                </span>
                 {workflow.title}
               </h1>
             </div>
-            <div className="flex items-center gap-2 flex-wrap shrink-0">
+            <div className="flex items-center gap-1.5 flex-wrap shrink-0">
               <button
                 onClick={() => setShareOpen(true)}
-                className="btn-secondary text-sm"
+                className="px-3 py-1.5 rounded text-sm text-slate-300 hover:bg-[#253858] hover:text-white transition"
               >
                 Share
               </button>
-              <button onClick={exportMarkdown} className="btn-secondary text-sm">
+              <button onClick={exportMarkdown} className="px-3 py-1.5 rounded text-sm text-slate-300 hover:bg-[#253858] hover:text-white transition">
                 Export
               </button>
               <button
                 onClick={() => setEditOpen(true)}
-                className="btn-secondary text-sm"
+                className="px-3 py-1.5 rounded text-sm text-slate-300 hover:bg-[#253858] hover:text-white transition"
               >
-                Edit workflow
+                Edit
               </button>
-              <Link href="/dashboard" className="btn-secondary text-sm">
-                All workflows
+              <Link href="/dashboard" className="px-3 py-1.5 rounded text-sm text-slate-300 hover:bg-[#253858] hover:text-white transition inline-block">
+                Back
               </Link>
               <button
                 onClick={handleDeleteWorkflow}
-                className="text-red-400 hover:bg-red-500/20 px-3 py-1.5 rounded-lg text-sm"
+                className="text-red-400 hover:bg-red-500/20 px-3 py-1.5 rounded text-sm transition"
               >
-                Delete workflow
+                Delete
               </button>
             </div>
           </div>
@@ -225,17 +234,18 @@ export default function WorkflowPage() {
             </div>
           )}
 
-          <div className="mb-6">
-            <p className="text-muted text-sm mb-2">Goal: {workflow.goal}</p>
+          <div className="mb-4 py-3 px-4 rounded bg-[#1E3A5F] border border-[#253858]">
+            <p className="text-muted text-xs mb-2">Goal</p>
+            <p className="text-white text-sm mb-3">{workflow.goal}</p>
             <div className="flex items-center gap-3">
-              <div className="flex-1 h-2 rounded-full bg-slate-700 overflow-hidden">
+              <div className="flex-1 h-1.5 rounded-full bg-[#253858] overflow-hidden">
                 <div
                   className="h-full bg-success rounded-full transition-all"
                   style={{ width: `${progress}%` }}
                 />
               </div>
-              <span className="text-muted text-sm whitespace-nowrap">
-                {completedTasks}/{totalTasks} tasks
+              <span className="text-muted text-xs whitespace-nowrap">
+                {completedTasks} of {totalTasks} tasks
               </span>
             </div>
           </div>

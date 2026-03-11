@@ -14,9 +14,9 @@ export function Logo({ className = "", href = "/dashboard" }: { className?: stri
         xmlns="http://www.w3.org/2000/svg"
         className="shrink-0"
       >
-        <circle cx="8" cy="16" r="3" fill="#6366F1" />
-        <circle cx="16" cy="16" r="3" fill="#6366F1" />
-        <circle cx="24" cy="16" r="3" fill="#6366F1" />
+        <circle cx="8" cy="16" r="3" fill="#0052CC" />
+        <circle cx="16" cy="16" r="3" fill="#0052CC" />
+        <circle cx="24" cy="16" r="3" fill="#0052CC" />
         <path
           d="M11 16H13M19 16H21M14 14.5L15.5 16L14 17.5M20 14.5L21.5 16L20 17.5"
           stroke="#F1F5F9"
