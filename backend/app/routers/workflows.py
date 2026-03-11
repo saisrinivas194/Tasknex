@@ -6,7 +6,20 @@ from sqlalchemy import select, func, delete, or_
 from sqlalchemy.orm import selectinload
 
 from app.database import get_db
-from app.models import User, Workflow, Step, Task, TaskStatus, TaskPriority, WorkflowShare, TeamMember, Team
+from app.models import (
+    User,
+    Workflow,
+    Step,
+    Task,
+    TaskStatus,
+    TaskPriority,
+    WorkflowShare,
+    TeamMember,
+    Team,
+    TaskComment,
+    TaskChecklistItem,
+    WorkflowActivity,
+)
 from app.schemas import (
     WorkflowCreate,
     WorkflowResponse,
@@ -17,6 +30,12 @@ from app.schemas import (
     TaskCreate,
     TaskResponse,
     TaskUpdate,
+    TaskChecklistItemResponse,
+    TaskChecklistItemCreate,
+    TaskChecklistItemUpdate,
+    TaskCommentCreate,
+    TaskCommentResponse,
+    WorkflowActivityResponse,
     GenerateWorkflowRequest,
     AIAssistantRequest,
     WorkflowShareRequest,
@@ -32,12 +51,41 @@ router = APIRouter(prefix="/workflows", tags=["workflows"])
 VALID_ISSUE_TYPES = {"task", "bug", "story", "subtask"}
 
 
-def _task_to_response(task: Task) -> TaskResponse:
+async def _log_activity(
+    db: AsyncSession,
+    workflow_id: int,
+    user_id: int,
+    action: str,
+    target_type: str | None = None,
+    target_id: int | None = None,
+    details: str | None = None,
+) -> None:
+    a = WorkflowActivity(
+        workflow_id=workflow_id,
+        user_id=user_id,
+        action=action,
+        target_type=target_type,
+        target_id=target_id,
+        details=details,
+    )
+    db.add(a)
+
+
+def _task_to_response(task: Task, comment_count: int = 0) -> TaskResponse:
+    checklist = []
+    if getattr(task, "checklist_items", None) is not None:
+        checklist = [TaskChecklistItemResponse.model_validate(i) for i in task.checklist_items]
     data = TaskResponse.model_validate(task)
     assignee_name = None
     if getattr(task, "assignee", None) and task.assignee:
         assignee_name = task.assignee.display_name or task.assignee.email
-    return data.model_copy(update={"assignee_name": assignee_name})
+    return data.model_copy(
+        update={
+            "assignee_name": assignee_name,
+            "comment_count": comment_count,
+            "checklist_items": checklist,
+        }
+    )
 
 
 @router.post("/generate", response_model=WorkflowResponse)
@@ -197,16 +245,29 @@ async def get_workflow(
     result = await db.execute(
         select(Workflow)
         .where(Workflow.id == workflow_id)
-        .options(selectinload(Workflow.steps).selectinload(Step.tasks).selectinload(Task.assignee))
+        .options(
+            selectinload(Workflow.steps)
+            .selectinload(Step.tasks)
+            .options(selectinload(Task.assignee), selectinload(Task.checklist_items)),
+        )
     )
     workflow = result.scalar_one()
+    task_ids = [t.id for s in workflow.steps for t in s.tasks]
+    comment_counts: dict[int, int] = {}
+    if task_ids:
+        count_result = await db.execute(
+            select(TaskComment.task_id, func.count(TaskComment.id))
+            .where(TaskComment.task_id.in_(task_ids))
+            .group_by(TaskComment.task_id)
+        )
+        comment_counts = {row[0]: row[1] for row in count_result.all()}
     steps_data = [
         StepResponse(
             id=s.id,
             workflow_id=s.workflow_id,
             title=s.title,
             step_order=s.step_order,
-            tasks=[_task_to_response(t) for t in s.tasks],
+            tasks=[_task_to_response(t, comment_count=comment_counts.get(t.id, 0)) for t in s.tasks],
         )
         for s in workflow.steps
     ]
@@ -239,16 +300,29 @@ async def update_workflow(
     result = await db.execute(
         select(Workflow)
         .where(Workflow.id == workflow_id)
-        .options(selectinload(Workflow.steps).selectinload(Step.tasks).selectinload(Task.assignee))
+        .options(
+            selectinload(Workflow.steps)
+            .selectinload(Step.tasks)
+            .options(selectinload(Task.assignee), selectinload(Task.checklist_items)),
+        )
     )
     w = result.scalar_one()
+    task_ids = [t.id for s in w.steps for t in s.tasks]
+    comment_counts = {}
+    if task_ids:
+        count_result = await db.execute(
+            select(TaskComment.task_id, func.count(TaskComment.id))
+            .where(TaskComment.task_id.in_(task_ids))
+            .group_by(TaskComment.task_id)
+        )
+        comment_counts = {r[0]: r[1] for r in count_result.all()}
     steps_data = [
         StepResponse(
             id=s.id,
             workflow_id=s.workflow_id,
             title=s.title,
             step_order=s.step_order,
-            tasks=[_task_to_response(t) for t in s.tasks],
+            tasks=[_task_to_response(t, comment_count=comment_counts.get(t.id, 0)) for t in s.tasks],
         )
         for s in w.steps
     ]
@@ -371,7 +445,7 @@ async def duplicate_workflow(
     result = await db.execute(
         select(Workflow)
         .where(Workflow.id == workflow_id)
-        .options(selectinload(Workflow.steps).selectinload(Step.tasks))
+        .options(selectinload(Workflow.steps).selectinload(Step.tasks).selectinload(Task.checklist_items))
     )
     workflow = result.scalar_one()
     new_workflow = Workflow(
@@ -395,7 +469,7 @@ async def duplicate_workflow(
         db.add(new_step)
         await db.flush()
         for task in step.tasks:
-            db.add(Task(
+            new_task = Task(
                 step_id=new_step.id,
                 title=task.title,
                 description=task.description or "",
@@ -406,7 +480,16 @@ async def duplicate_workflow(
                 labels=task.labels,
                 issue_type=getattr(task, "issue_type", "task") or "task",
                 assignee_id=None,
-            ))
+            )
+            db.add(new_task)
+            await db.flush()
+            for ci in getattr(task, "checklist_items", None) or []:
+                db.add(TaskChecklistItem(
+                    task_id=new_task.id,
+                    title=ci.title,
+                    done=ci.done,
+                    sort_order=getattr(ci, "sort_order", 0),
+                ))
     await db.commit()
     result = await db.execute(
         select(Workflow)
@@ -429,6 +512,8 @@ async def add_step(
         raise HTTPException(status_code=404 if not role else 403, detail="Workflow not found" if not role else "Cannot edit this workflow")
     step = Step(workflow_id=workflow_id, title=body.title, step_order=body.step_order)
     db.add(step)
+    await db.flush()
+    await _log_activity(db, workflow_id, current_user.id, "step_created", "step", step.id, step.title)
     await db.commit()
     await db.refresh(step)
     return StepResponse(id=step.id, workflow_id=step.workflow_id, title=step.title, step_order=step.step_order, tasks=[])
@@ -526,8 +611,12 @@ async def add_task(
         assignee_id=body.assignee_id,
     )
     db.add(task)
+    await db.flush()
+    await _log_activity(db, workflow_id, current_user.id, "task_created", "task", task.id, task.title[:200] if task.title else None)
     await db.commit()
-    task_result = await db.execute(select(Task).where(Task.id == task.id).options(selectinload(Task.assignee)))
+    task_result = await db.execute(
+        select(Task).where(Task.id == task.id).options(selectinload(Task.assignee), selectinload(Task.checklist_items))
+    )
     return _task_to_response(task_result.scalar_one())
 
 
@@ -569,10 +658,16 @@ async def update_task(
         if body.assignee_id not in assignable:
             raise HTTPException(status_code=400, detail="Assignee does not have access to this workflow")
         task.assignee_id = body.assignee_id
+    detail = None
+    if body.status is not None:
+        detail = f"status→{body.status.value}"
+    await _log_activity(db, workflow_id, current_user.id, "task_updated", "task", task.id, detail)
     await db.commit()
     await db.refresh(task)
-    task_with_assignee = await db.execute(select(Task).where(Task.id == task.id).options(selectinload(Task.assignee)))
-    return _task_to_response(task_with_assignee.scalar_one())
+    task_with_assignee = await db.execute(select(Task).where(Task.id == task.id).options(selectinload(Task.assignee), selectinload(Task.checklist_items)))
+    t = task_with_assignee.scalar_one()
+    cnt = await db.execute(select(func.count(TaskComment.id)).where(TaskComment.task_id == t.id))
+    return _task_to_response(t, comment_count=cnt.scalar() or 0)
 
 
 @router.delete("/{workflow_id}/tasks/{task_id}", status_code=204)
@@ -591,7 +686,189 @@ async def delete_task(
     task = task_result.scalar_one_or_none()
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
+    title_snap = task.title[:200] if task.title else None
+    await _log_activity(db, workflow_id, current_user.id, "task_deleted", "task", task_id, title_snap)
     await db.delete(task)
+    await db.commit()
+
+
+# Activity log
+@router.get("/{workflow_id}/activity", response_model=list[WorkflowActivityResponse])
+async def list_workflow_activity(
+    workflow_id: int,
+    limit: int = Query(50, ge=1, le=100),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    _, role = await get_workflow_and_access(db, current_user.id, workflow_id)
+    if not role:
+        raise HTTPException(status_code=404, detail="Workflow not found")
+    result = await db.execute(
+        select(WorkflowActivity)
+        .where(WorkflowActivity.workflow_id == workflow_id)
+        .options(selectinload(WorkflowActivity.user))
+        .order_by(WorkflowActivity.created_at.desc())
+        .limit(limit)
+    )
+    activities = result.scalars().all()
+    return [
+        WorkflowActivityResponse(
+            id=a.id,
+            workflow_id=a.workflow_id,
+            user_id=a.user_id,
+            action=a.action,
+            target_type=a.target_type,
+            target_id=a.target_id,
+            details=a.details,
+            created_at=a.created_at,
+            user_name=a.user.display_name or a.user.email if a.user else None,
+        )
+        for a in activities
+    ]
+
+
+# Task comments
+@router.get("/{workflow_id}/tasks/{task_id}/comments", response_model=list[TaskCommentResponse])
+async def list_task_comments(
+    workflow_id: int,
+    task_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    _, role = await get_workflow_and_access(db, current_user.id, workflow_id)
+    if not role:
+        raise HTTPException(status_code=404, detail="Workflow not found")
+    task_result = await db.execute(select(Task).join(Step).where(Task.id == task_id, Step.workflow_id == workflow_id))
+    if not task_result.scalar_one_or_none():
+        raise HTTPException(status_code=404, detail="Task not found")
+    result = await db.execute(
+        select(TaskComment)
+        .where(TaskComment.task_id == task_id)
+        .options(selectinload(TaskComment.user))
+        .order_by(TaskComment.created_at)
+    )
+    comments = result.scalars().all()
+    return [
+        TaskCommentResponse(
+            id=c.id,
+            task_id=c.task_id,
+            user_id=c.user_id,
+            body=c.body,
+            created_at=c.created_at,
+            author_name=c.user.display_name or c.user.email if c.user else None,
+        )
+        for c in comments
+    ]
+
+
+@router.post("/{workflow_id}/tasks/{task_id}/comments", response_model=TaskCommentResponse)
+async def add_task_comment(
+    workflow_id: int,
+    task_id: int,
+    body: TaskCommentCreate,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    _, role = await get_workflow_and_access(db, current_user.id, workflow_id)
+    if not role or role not in ("owner", "editor"):
+        raise HTTPException(status_code=404 if not role else 403, detail="Workflow not found" if not role else "Cannot edit")
+    task_result = await db.execute(select(Task).join(Step).where(Task.id == task_id, Step.workflow_id == workflow_id))
+    if not task_result.scalar_one_or_none():
+        raise HTTPException(status_code=404, detail="Task not found")
+    comment = TaskComment(task_id=task_id, user_id=current_user.id, body=(body.body or "").strip() or " ")
+    db.add(comment)
+    await db.flush()
+    await _log_activity(db, workflow_id, current_user.id, "comment_added", "task", task_id, None)
+    await db.commit()
+    await db.refresh(comment)
+    return TaskCommentResponse(
+        id=comment.id,
+        task_id=comment.task_id,
+        user_id=comment.user_id,
+        body=comment.body,
+        created_at=comment.created_at,
+        author_name=current_user.display_name or current_user.email,
+    )
+
+
+# Task checklist
+@router.post("/{workflow_id}/tasks/{task_id}/checklist", response_model=TaskChecklistItemResponse)
+async def add_checklist_item(
+    workflow_id: int,
+    task_id: int,
+    body: TaskChecklistItemCreate,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    _, role = await get_workflow_and_access(db, current_user.id, workflow_id)
+    if not role or role not in ("owner", "editor"):
+        raise HTTPException(status_code=404 if not role else 403, detail="Workflow not found" if not role else "Cannot edit")
+    task_result = await db.execute(select(Task).join(Step).where(Task.id == task_id, Step.workflow_id == workflow_id))
+    task = task_result.scalar_one_or_none()
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+    max_order = await db.execute(
+        select(func.coalesce(func.max(TaskChecklistItem.sort_order), 0)).where(TaskChecklistItem.task_id == task_id)
+    )
+    next_order = (max_order.scalar() or 0) + 1
+    item = TaskChecklistItem(task_id=task_id, title=(body.title or "").strip() or "Item", done=False, sort_order=next_order)
+    db.add(item)
+    await db.commit()
+    await db.refresh(item)
+    return TaskChecklistItemResponse.model_validate(item)
+
+
+@router.patch("/{workflow_id}/tasks/{task_id}/checklist/{item_id}", response_model=TaskChecklistItemResponse)
+async def update_checklist_item(
+    workflow_id: int,
+    task_id: int,
+    item_id: int,
+    body: TaskChecklistItemUpdate,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    _, role = await get_workflow_and_access(db, current_user.id, workflow_id)
+    if not role or role not in ("owner", "editor"):
+        raise HTTPException(status_code=404 if not role else 403, detail="Workflow not found" if not role else "Cannot edit")
+    result = await db.execute(
+        select(TaskChecklistItem).where(
+            TaskChecklistItem.id == item_id,
+            TaskChecklistItem.task_id == task_id,
+        )
+    )
+    item = result.scalar_one_or_none()
+    if not item:
+        raise HTTPException(status_code=404, detail="Checklist item not found")
+    if body.title is not None:
+        item.title = (body.title or "").strip() or item.title
+    if body.done is not None:
+        item.done = body.done
+    await db.commit()
+    await db.refresh(item)
+    return TaskChecklistItemResponse.model_validate(item)
+
+
+@router.delete("/{workflow_id}/tasks/{task_id}/checklist/{item_id}", status_code=204)
+async def delete_checklist_item(
+    workflow_id: int,
+    task_id: int,
+    item_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    _, role = await get_workflow_and_access(db, current_user.id, workflow_id)
+    if not role or role not in ("owner", "editor"):
+        raise HTTPException(status_code=404 if not role else 403, detail="Workflow not found" if not role else "Cannot edit")
+    result = await db.execute(
+        select(TaskChecklistItem).where(
+            TaskChecklistItem.id == item_id,
+            TaskChecklistItem.task_id == task_id,
+        )
+    )
+    item = result.scalar_one_or_none()
+    if not item:
+        raise HTTPException(status_code=404, detail="Checklist item not found")
+    await db.delete(item)
     await db.commit()
 
 

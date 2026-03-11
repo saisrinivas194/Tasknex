@@ -161,6 +161,7 @@ export function TaskBoard({ workflow, onTaskUpdate, onRefresh, canEdit = true, a
                     onDelete={() => {
                       api.workflows.deleteTask(workflow.id, task.id).then(onRefresh);
                     }}
+                    onRefresh={onRefresh}
                   />
                 ))}
               </div>

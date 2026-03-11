@@ -1,5 +1,5 @@
 from datetime import datetime, date
-from sqlalchemy import String, Text, Integer, DateTime, Date, ForeignKey, Enum as SQLEnum, Column
+from sqlalchemy import String, Text, Integer, Boolean, DateTime, Date, ForeignKey, Enum as SQLEnum, Column
 from sqlalchemy.orm import relationship
 import enum
 
@@ -112,6 +112,7 @@ class Workflow(Base):
     user = relationship("User", back_populates="workflows")
     steps = relationship("Step", back_populates="workflow", order_by="Step.step_order", cascade="all, delete-orphan")
     shares = relationship("WorkflowShare", back_populates="workflow", cascade="all, delete-orphan")
+    activity = relationship("WorkflowActivity", back_populates="workflow", cascade="all, delete-orphan", order_by="WorkflowActivity.created_at.desc()")
 
 
 class Step(Base):
@@ -145,3 +146,46 @@ class Task(Base):
 
     step = relationship("Step", back_populates="tasks")
     assignee = relationship("User", foreign_keys=[assignee_id])
+    comments = relationship("TaskComment", back_populates="task", cascade="all, delete-orphan", order_by="TaskComment.id")
+    checklist_items = relationship("TaskChecklistItem", back_populates="task", cascade="all, delete-orphan", order_by="TaskChecklistItem.sort_order, TaskChecklistItem.id")
+
+
+class TaskComment(Base):
+    __tablename__ = "task_comments"
+
+    id = Column(Integer, primary_key=True, index=True)
+    task_id = Column(Integer, ForeignKey("tasks.id", ondelete="CASCADE"), nullable=False, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    body = Column(Text, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    task = relationship("Task", back_populates="comments")
+    user = relationship("User", foreign_keys=[user_id])
+
+
+class TaskChecklistItem(Base):
+    __tablename__ = "task_checklist_items"
+
+    id = Column(Integer, primary_key=True, index=True)
+    task_id = Column(Integer, ForeignKey("tasks.id", ondelete="CASCADE"), nullable=False, index=True)
+    title = Column(String(500), nullable=False)
+    done = Column(Boolean, default=False, nullable=False)
+    sort_order = Column(Integer, default=0, nullable=False)
+
+    task = relationship("Task", back_populates="checklist_items")
+
+
+class WorkflowActivity(Base):
+    __tablename__ = "workflow_activity"
+
+    id = Column(Integer, primary_key=True, index=True)
+    workflow_id = Column(Integer, ForeignKey("workflows.id", ondelete="CASCADE"), nullable=False, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    action = Column(String(80), nullable=False)  # task_created, task_updated, task_deleted, task_status_changed, comment_added, step_created, etc.
+    target_type = Column(String(20), nullable=True)  # task, step, workflow
+    target_id = Column(Integer, nullable=True)
+    details = Column(Text, nullable=True)  # optional JSON or text
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    workflow = relationship("Workflow", back_populates="activity")
+    user = relationship("User", foreign_keys=[user_id])

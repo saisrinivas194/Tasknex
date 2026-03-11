@@ -76,6 +76,62 @@ class TaskUpdate(BaseModel):
     assignee_id: int | None = None
 
 
+class TaskChecklistItemResponse(BaseModel):
+    id: int
+    task_id: int
+    title: str
+    done: bool
+    sort_order: int
+
+    class Config:
+        from_attributes = True
+
+    @field_validator("done", mode="before")
+    @classmethod
+    def done_bool(cls, v: bool | int) -> bool:
+        return bool(v)
+
+
+class TaskCommentCreate(BaseModel):
+    body: str
+
+
+class TaskCommentResponse(BaseModel):
+    id: int
+    task_id: int
+    user_id: int
+    body: str
+    created_at: datetime
+    author_name: str | None = None
+
+    class Config:
+        from_attributes = True
+
+
+class TaskChecklistItemCreate(BaseModel):
+    title: str
+
+
+class TaskChecklistItemUpdate(BaseModel):
+    title: str | None = None
+    done: bool | None = None
+
+
+class WorkflowActivityResponse(BaseModel):
+    id: int
+    workflow_id: int
+    user_id: int
+    action: str
+    target_type: str | None = None
+    target_id: int | None = None
+    details: str | None = None
+    created_at: datetime
+    user_name: str | None = None
+
+    class Config:
+        from_attributes = True
+
+
 class TaskResponse(BaseModel):
     id: int
     step_id: int
@@ -91,6 +147,8 @@ class TaskResponse(BaseModel):
     assignee_name: str | None = None
     created_at: datetime
     updated_at: datetime | None = None
+    checklist_items: list[TaskChecklistItemResponse] = []
+    comment_count: int = 0
 
     class Config:
         from_attributes = True

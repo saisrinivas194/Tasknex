@@ -71,6 +71,30 @@ MIGRATIONS = [
     "ALTER TABLE tasks ADD COLUMN IF NOT EXISTS issue_type VARCHAR(20) DEFAULT 'task' NOT NULL;",
     "ALTER TABLE tasks ADD COLUMN IF NOT EXISTS assignee_id INTEGER REFERENCES users(id) ON DELETE SET NULL;",
     "ALTER TABLE tasks ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP;",
+    """CREATE TABLE IF NOT EXISTS task_comments (
+        id SERIAL PRIMARY KEY,
+        task_id INTEGER NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+        user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        body TEXT NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );""",
+    """CREATE TABLE IF NOT EXISTS task_checklist_items (
+        id SERIAL PRIMARY KEY,
+        task_id INTEGER NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+        title VARCHAR(500) NOT NULL,
+        done BOOLEAN DEFAULT FALSE NOT NULL,
+        sort_order INTEGER DEFAULT 0 NOT NULL
+    );""",
+    """CREATE TABLE IF NOT EXISTS workflow_activity (
+        id SERIAL PRIMARY KEY,
+        workflow_id INTEGER NOT NULL REFERENCES workflows(id) ON DELETE CASCADE,
+        user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        action VARCHAR(80) NOT NULL,
+        target_type VARCHAR(20),
+        target_id INTEGER,
+        details TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );""",
 ]
 
 

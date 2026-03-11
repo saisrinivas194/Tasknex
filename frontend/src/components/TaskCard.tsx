@@ -1,7 +1,8 @@
 "use client";
 
-import { useState } from "react";
-import { Task, TaskStatus, TaskPriority, AssignableUser } from "@/lib/api";
+import { useState, useEffect } from "react";
+import { Task, TaskStatus, TaskPriority, AssignableUser, TaskChecklistItem, TaskComment } from "@/lib/api";
+import { api } from "@/lib/api";
 
 const ISSUE_TYPE_LABELS: Record<string, string> = {
   task: "Task",
@@ -78,11 +79,18 @@ type TaskCardProps = {
     assignee_id?: number | null;
   }) => void;
   onDelete: () => void;
+  onRefresh?: () => void;
 };
 
-export function TaskCard({ task, workflowId, canEdit = true, assignableUsers = [], onDragStart, onDragEnd, onUpdate, onDelete }: TaskCardProps) {
+export function TaskCard({ task, workflowId, canEdit = true, assignableUsers = [], onDragStart, onDragEnd, onUpdate, onDelete, onRefresh }: TaskCardProps) {
   const [editing, setEditing] = useState(false);
   const [title, setTitle] = useState(task.title);
+  const [commentsOpen, setCommentsOpen] = useState(false);
+  const [comments, setComments] = useState<TaskComment[]>([]);
+  const [commentBody, setCommentBody] = useState("");
+  const [checklistNewTitle, setChecklistNewTitle] = useState("");
+  const [commentLoading, setCommentLoading] = useState(false);
+  const [checklistLoading, setChecklistLoading] = useState(false);
   const [description, setDescription] = useState(task.description);
   const [documentUrl, setDocumentUrl] = useState(task.document_url ?? "");
   const [priority, setPriority] = useState<TaskPriority>(task.priority ?? "medium");
@@ -90,6 +98,58 @@ export function TaskCard({ task, workflowId, canEdit = true, assignableUsers = [
   const [labelsStr, setLabelsStr] = useState((task.labels ?? []).join(", "));
   const [issueType, setIssueType] = useState(task.issue_type ?? "task");
   const [assigneeId, setAssigneeId] = useState<number | null>(task.assignee_id ?? null);
+
+  useEffect(() => {
+    if (commentsOpen && workflowId && task.id) {
+      api.workflows.listComments(workflowId, task.id).then(setComments).catch(() => setComments([]));
+    }
+  }, [commentsOpen, workflowId, task.id]);
+
+  const checklistItems = task.checklist_items ?? [];
+  const checklistDone = checklistItems.filter((i) => i.done).length;
+
+  const handleToggleChecklist = (item: TaskChecklistItem) => {
+    if (!canEdit || !onRefresh) return;
+    setChecklistLoading(true);
+    api.workflows
+      .updateChecklistItem(workflowId, task.id, item.id, { done: !item.done })
+      .then(() => onRefresh())
+      .finally(() => setChecklistLoading(false));
+  };
+  const handleAddChecklistItem = () => {
+    const t = checklistNewTitle.trim();
+    if (!t || !canEdit || !onRefresh) return;
+    setChecklistLoading(true);
+    api.workflows
+      .addChecklistItem(workflowId, task.id, t)
+      .then(() => {
+        setChecklistNewTitle("");
+        onRefresh();
+      })
+      .finally(() => setChecklistLoading(false));
+  };
+  const handleDeleteChecklistItem = (itemId: number) => {
+    if (!canEdit || !onRefresh) return;
+    setChecklistLoading(true);
+    api.workflows
+      .deleteChecklistItem(workflowId, task.id, itemId)
+      .then(() => onRefresh())
+      .finally(() => setChecklistLoading(false));
+  };
+  const handleAddComment = () => {
+    const b = commentBody.trim();
+    if (!b || !canEdit || !onRefresh) return;
+    setCommentLoading(true);
+    api.workflows
+      .addComment(workflowId, task.id, b)
+      .then(() => {
+        setCommentBody("");
+        onRefresh();
+        return api.workflows.listComments(workflowId, task.id);
+      })
+      .then(setComments)
+      .finally(() => setCommentLoading(false));
+  };
 
   const saveEdit = () => {
     if (title.trim()) {
@@ -301,6 +361,119 @@ export function TaskCard({ task, workflowId, canEdit = true, assignableUsers = [
               <span aria-hidden>🔗</span> Document link
             </a>
           )}
+          {checklistItems.length > 0 && (
+            <div className="mt-1.5 space-y-1" onClick={(e) => e.stopPropagation()}>
+              <span className="text-[10px] text-muted">Checklist ({checklistDone}/{checklistItems.length})</span>
+              <ul className="space-y-0.5">
+                {checklistItems.map((item) => (
+                  <li key={item.id} className="flex items-center gap-1.5 text-xs">
+                    <input
+                      type="checkbox"
+                      checked={item.done}
+                      onChange={() => handleToggleChecklist(item)}
+                      disabled={!canEdit || checklistLoading}
+                      className="rounded border-[#344563] bg-[#1E3A5F] text-primary"
+                    />
+                    <span className={item.done ? "text-muted line-through flex-1 min-w-0" : "text-slate-300 flex-1 min-w-0 truncate"}>
+                      {item.title}
+                    </span>
+                    {canEdit && (
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteChecklistItem(item.id)}
+                        disabled={checklistLoading}
+                        className="text-slate-500 hover:text-red-400 text-[10px] shrink-0"
+                        aria-label="Remove"
+                      >
+                        ×
+                      </button>
+                    )}
+                  </li>
+                ))}
+              </ul>
+              {canEdit && (
+                <div className="flex gap-1 mt-0.5">
+                  <input
+                    type="text"
+                    value={checklistNewTitle}
+                    onChange={(e) => setChecklistNewTitle(e.target.value)}
+                    onKeyDown={(e) => e.key === "Enter" && handleAddChecklistItem()}
+                    placeholder="Add item..."
+                    className="input-field text-xs py-1 flex-1 min-w-0"
+                  />
+                  <button
+                    type="button"
+                    onClick={handleAddChecklistItem}
+                    disabled={!checklistNewTitle.trim() || checklistLoading}
+                    className="btn-primary text-xs py-1 px-2"
+                  >
+                    Add
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
+          {canEdit && checklistItems.length === 0 && (
+            <div className="mt-1 flex gap-1" onClick={(e) => e.stopPropagation()}>
+              <input
+                type="text"
+                value={checklistNewTitle}
+                onChange={(e) => setChecklistNewTitle(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && handleAddChecklistItem()}
+                placeholder="Add checklist..."
+                className="input-field text-xs py-1 flex-1 min-w-0"
+              />
+              <button
+                type="button"
+                onClick={handleAddChecklistItem}
+                disabled={!checklistNewTitle.trim() || checklistLoading}
+                className="btn-primary text-xs py-1 px-2"
+              >
+                Add
+              </button>
+            </div>
+          )}
+          <div className="mt-1" onClick={(e) => e.stopPropagation()}>
+            <button
+              type="button"
+              onClick={() => setCommentsOpen(!commentsOpen)}
+              className="text-muted hover:text-slate-300 text-xs flex items-center gap-1"
+            >
+              💬 {task.comment_count ?? 0} comment{(task.comment_count ?? 0) !== 1 ? "s" : ""}
+            </button>
+            {commentsOpen && (
+              <div className="mt-1.5 p-1.5 bg-[#1E3A5F] rounded border border-[#344563] space-y-2">
+                <ul className="space-y-1 max-h-32 overflow-auto">
+                  {comments.map((c) => (
+                    <li key={c.id} className="text-xs">
+                      <span className="text-muted">{c.author_name ?? "User"}: </span>
+                      <span className="text-slate-200">{c.body}</span>
+                    </li>
+                  ))}
+                </ul>
+                {canEdit && (
+                  <div className="flex gap-1">
+                    <input
+                      type="text"
+                      value={commentBody}
+                      onChange={(e) => setCommentBody(e.target.value)}
+                      onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), handleAddComment())}
+                      placeholder="Add a comment..."
+                      className="input-field text-xs py-1 flex-1 min-w-0"
+                    />
+                    <button
+                      type="button"
+                      onClick={handleAddComment}
+                      disabled={!commentBody.trim() || commentLoading}
+                      className="btn-primary text-xs py-1 px-2"
+                    >
+                      Post
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
           {canEdit && (
             <div className="flex items-center gap-2 mt-2 flex-wrap">
               <select

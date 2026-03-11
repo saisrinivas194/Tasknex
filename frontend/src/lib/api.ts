@@ -28,6 +28,35 @@ export type Session = {
 export type TaskStatus = "planned" | "in_progress" | "completed";
 export type TaskPriority = "low" | "medium" | "high" | "critical";
 export type IssueType = "task" | "bug" | "story" | "subtask";
+export type TaskChecklistItem = {
+  id: number;
+  task_id: number;
+  title: string;
+  done: boolean;
+  sort_order: number;
+};
+
+export type TaskComment = {
+  id: number;
+  task_id: number;
+  user_id: number;
+  body: string;
+  created_at: string;
+  author_name?: string | null;
+};
+
+export type WorkflowActivityItem = {
+  id: number;
+  workflow_id: number;
+  user_id: number;
+  action: string;
+  target_type?: string | null;
+  target_id?: number | null;
+  details?: string | null;
+  created_at: string;
+  user_name?: string | null;
+};
+
 export type Task = {
   id: number;
   step_id: number;
@@ -43,6 +72,8 @@ export type Task = {
   assignee_name?: string | null;
   created_at: string;
   updated_at?: string | null;
+  checklist_items?: TaskChecklistItem[];
+  comment_count?: number;
 };
 export type Step = {
   id: number;
@@ -288,6 +319,37 @@ export const api = {
       request<void>(`/workflows/${workflowId}/tasks/${taskId}`, {
         method: "DELETE",
       }),
+    getActivity: (workflowId: number, limit?: number) =>
+      request<WorkflowActivityItem[]>(
+        `/workflows/${workflowId}/activity${limit != null ? `?limit=${limit}` : ""}`
+      ),
+    listComments: (workflowId: number, taskId: number) =>
+      request<TaskComment[]>(`/workflows/${workflowId}/tasks/${taskId}/comments`),
+    addComment: (workflowId: number, taskId: number, body: string) =>
+      request<TaskComment>(`/workflows/${workflowId}/tasks/${taskId}/comments`, {
+        method: "POST",
+        body: JSON.stringify({ body }),
+      }),
+    addChecklistItem: (workflowId: number, taskId: number, title: string) =>
+      request<TaskChecklistItem>(`/workflows/${workflowId}/tasks/${taskId}/checklist`, {
+        method: "POST",
+        body: JSON.stringify({ title }),
+      }),
+    updateChecklistItem: (
+      workflowId: number,
+      taskId: number,
+      itemId: number,
+      data: { title?: string; done?: boolean }
+    ) =>
+      request<TaskChecklistItem>(
+        `/workflows/${workflowId}/tasks/${taskId}/checklist/${itemId}`,
+        { method: "PATCH", body: JSON.stringify(data) }
+      ),
+    deleteChecklistItem: (workflowId: number, taskId: number, itemId: number) =>
+      request<void>(
+        `/workflows/${workflowId}/tasks/${taskId}/checklist/${itemId}`,
+        { method: "DELETE" }
+      ),
     aiAssistant: (workflowId: number, prompt: string) =>
       request<Workflow>("/workflows/ai-assistant", {
         method: "POST",

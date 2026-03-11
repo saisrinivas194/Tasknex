@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter, useParams } from "next/navigation";
 import Link from "next/link";
 import { useAuth } from "@/components/AuthProvider";
-import { api, Workflow, Task, TaskStatus, WorkflowShare, Team, AssignableUser } from "@/lib/api";
+import { api, Workflow, Task, TaskStatus, WorkflowShare, Team, AssignableUser, WorkflowActivityItem } from "@/lib/api";
 import { TaskBoard } from "@/components/TaskBoard";
 import { Sidebar } from "@/components/Sidebar";
 import { Spinner } from "@/components/Spinner";
@@ -30,6 +30,8 @@ export default function WorkflowPage() {
   const [sharing, setSharing] = useState(false);
   const [removingShareId, setRemovingShareId] = useState<number | null>(null);
   const [assignableUsers, setAssignableUsers] = useState<AssignableUser[]>([]);
+  const [activity, setActivity] = useState<WorkflowActivityItem[]>([]);
+  const [activityOpen, setActivityOpen] = useState(false);
 
   const refresh = () => {
     if (!id || id < 1) {
@@ -65,6 +67,12 @@ export default function WorkflowPage() {
   }, [user, authLoading, id, router]);
 
   useEffect(() => {
+    if (activityOpen && workflow?.id) {
+      api.workflows.getActivity(workflow.id, 30).then(setActivity).catch(() => setActivity([]));
+    }
+  }, [activityOpen, workflow?.id]);
+
+  useEffect(() => {
     if (!shareOpen || !workflow) return;
     setShareModalOwner(null);
     api.workflows
@@ -85,6 +93,8 @@ export default function WorkflowPage() {
     priority?: import("@/lib/api").TaskPriority;
     due_date?: string | null;
     labels?: string[];
+    issue_type?: string;
+    assignee_id?: number | null;
   }) => {
     if (!workflow) return;
     api.workflows
@@ -285,6 +295,49 @@ export default function WorkflowPage() {
             canEdit={workflow.role !== "viewer"}
             assignableUsers={assignableUsers}
           />
+
+          <div className="mt-6">
+            <button
+              type="button"
+              onClick={() => setActivityOpen(!activityOpen)}
+              className="text-muted hover:text-white text-sm font-medium flex items-center gap-2"
+            >
+              {activityOpen ? "▼" : "▶"} Activity
+            </button>
+            {activityOpen && (
+              <div className="mt-2 p-4 rounded bg-[#1E3A5F] border border-[#253858] max-h-64 overflow-auto">
+                {activity.length === 0 ? (
+                  <p className="text-muted text-sm">No activity yet.</p>
+                ) : (
+                  <ul className="space-y-2">
+                    {activity.map((a) => (
+                      <li key={a.id} className="text-xs flex gap-2">
+                        <span className="text-muted shrink-0">
+                          {new Date(a.created_at).toLocaleString(undefined, {
+                            month: "short",
+                            day: "numeric",
+                            hour: "2-digit",
+                            minute: "2-digit",
+                          })}
+                        </span>
+                        <span className="text-slate-300">
+                          <span className="text-muted">{a.user_name ?? "Someone"}</span>
+                          {" "}
+                          {a.action === "task_created" && "created task"}
+                          {a.action === "task_updated" && "updated task"}
+                          {a.action === "task_deleted" && "deleted task"}
+                          {a.action === "step_created" && "added step"}
+                          {a.action === "comment_added" && "added a comment"}
+                          {!["task_created", "task_updated", "task_deleted", "step_created", "comment_added"].includes(a.action) && a.action}
+                          {a.details && `: ${a.details}`}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            )}
+          </div>
         </div>
       </main>
 
