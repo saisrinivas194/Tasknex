@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { useAuth } from "@/components/AuthProvider";
 import { Sidebar } from "@/components/Sidebar";
 import { Spinner } from "@/components/Spinner";
-import { api } from "@/lib/api";
+import { api, type Session } from "@/lib/api";
 
 export default function SettingsPage() {
   const { user, loading: authLoading, refreshUser } = useAuth();
@@ -14,6 +14,10 @@ export default function SettingsPage() {
   const [bio, setBio] = useState("");
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
+  const [sessions, setSessions] = useState<Session[]>([]);
+  const [sessionsLoading, setSessionsLoading] = useState(false);
+  const [revokingId, setRevokingId] = useState<string | null>(null);
+  const [revokingOthers, setRevokingOthers] = useState(false);
 
   useEffect(() => {
     if (!authLoading && !user) {
@@ -25,6 +29,20 @@ export default function SettingsPage() {
       setBio(user.bio ?? "");
     }
   }, [user, authLoading, router]);
+
+  const loadSessions = () => {
+    if (!user) return;
+    setSessionsLoading(true);
+    api.auth.sessions
+      .list()
+      .then(setSessions)
+      .catch(() => setSessions([]))
+      .finally(() => setSessionsLoading(false));
+  };
+
+  useEffect(() => {
+    if (user) loadSessions();
+  }, [user]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -127,6 +145,75 @@ export default function SettingsPage() {
               <span className="text-muted text-sm">Email: {user.email}</span>
             </div>
           </form>
+
+          <section className="mt-12 pt-8 border-t border-[#253858]">
+            <h2 className="text-lg font-semibold text-white tracking-tight mb-1">
+              Sessions
+            </h2>
+            <p className="text-muted text-sm mb-4">
+              You can be logged in on multiple devices at once. Revoke a session to sign that device out.
+            </p>
+            {sessionsLoading ? (
+              <div className="flex items-center gap-2 text-muted text-sm py-4">
+                <Spinner className="h-4 w-4" /> Loading sessions…
+              </div>
+            ) : sessions.length === 0 ? (
+              <p className="text-muted text-sm">No sessions.</p>
+            ) : (
+              <div className="space-y-3">
+                {sessions.map((s) => (
+                  <div
+                    key={s.id}
+                    className="flex items-center justify-between gap-4 py-3 px-4 rounded-lg bg-[#253858]/50 border border-[#253858]"
+                  >
+                    <div className="min-w-0">
+                      <p className="text-sm text-white truncate">
+                        {s.label || "Session"} {s.current && <span className="badge bg-primary/20 text-primary-200 text-[10px] ml-2">Current</span>}
+                      </p>
+                      <p className="text-muted text-xs mt-0.5">
+                        Created {new Date(s.created_at).toLocaleString()}
+                      </p>
+                    </div>
+                    {!s.current && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setRevokingId(s.id);
+                          api.auth.sessions
+                            .revoke(s.id)
+                            .then(loadSessions)
+                            .catch((err) => setMessage({ type: "error", text: err instanceof Error ? err.message : "Failed to revoke" }))
+                            .finally(() => setRevokingId(null));
+                        }}
+                        disabled={revokingId === s.id}
+                        className="text-red-400 hover:bg-red-500/20 px-3 py-1.5 rounded text-sm transition disabled:opacity-50"
+                      >
+                        {revokingId === s.id ? "…" : "Revoke"}
+                      </button>
+                    )}
+                  </div>
+                ))}
+                {sessions.some((s) => !s.current) && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setRevokingOthers(true);
+                      api.auth.sessions
+                        .revokeOthers()
+                        .then(loadSessions)
+                        .then(() => setMessage({ type: "success", text: "All other sessions revoked." }))
+                        .catch((err) => setMessage({ type: "error", text: err instanceof Error ? err.message : "Failed" }))
+                        .finally(() => setRevokingOthers(false));
+                    }}
+                    disabled={revokingOthers}
+                    className="btn-secondary text-sm mt-2"
+                  >
+                    {revokingOthers ? "…" : "Revoke all other sessions"}
+                  </button>
+                )}
+              </div>
+            )}
+          </section>
         </div>
       </main>
     </div>

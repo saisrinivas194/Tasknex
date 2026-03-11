@@ -37,6 +37,17 @@ class Token(BaseModel):
     user: UserResponse
 
 
+class SessionResponse(BaseModel):
+    id: str
+    created_at: datetime
+    last_used_at: datetime | None = None
+    label: str | None = None
+    current: bool = False
+
+    class Config:
+        from_attributes = True
+
+
 class TaskBase(BaseModel):
     title: str
     description: str = ""
@@ -44,6 +55,8 @@ class TaskBase(BaseModel):
     priority: TaskPriority = TaskPriority.medium
     due_date: date | None = None
     labels: list[str] = []
+    issue_type: str = "task"  # task | bug | story | subtask
+    assignee_id: int | None = None
 
 
 class TaskCreate(TaskBase):
@@ -59,6 +72,8 @@ class TaskUpdate(BaseModel):
     priority: TaskPriority | None = None
     due_date: date | None = None
     labels: list[str] | None = None
+    issue_type: str | None = None
+    assignee_id: int | None = None
 
 
 class TaskResponse(BaseModel):
@@ -71,7 +86,11 @@ class TaskResponse(BaseModel):
     priority: TaskPriority
     due_date: date | None = None
     labels: list[str]
+    issue_type: str = "task"
+    assignee_id: int | None = None
+    assignee_name: str | None = None
     created_at: datetime
+    updated_at: datetime | None = None
 
     class Config:
         from_attributes = True
@@ -129,7 +148,11 @@ class WorkflowBase(BaseModel):
 
 
 class WorkflowCreate(WorkflowBase):
-    pass
+    status_planned_label: str | None = None
+    status_in_progress_label: str | None = None
+    status_completed_label: str | None = None
+    default_issue_type: str = "task"
+    default_priority: str | None = None
 
 
 class WorkflowResponse(BaseModel):
@@ -139,7 +162,21 @@ class WorkflowResponse(BaseModel):
     goal: str
     created_at: datetime
     steps: list[StepResponse] = []
-    role: str | None = None  # "owner" | "editor" | "viewer" for current user
+    role: str | None = None
+    status_planned_label: str | None = None
+    status_in_progress_label: str | None = None
+    status_completed_label: str | None = None
+    default_issue_type: str = "task"
+    default_priority: str | None = None
+
+    class Config:
+        from_attributes = True
+
+
+class AssignableUserResponse(BaseModel):
+    id: int
+    email: str
+    display_name: str | None = None
 
     class Config:
         from_attributes = True
@@ -152,7 +189,9 @@ class WorkflowListItem(BaseModel):
     created_at: datetime
     total_tasks: int = 0
     completed_tasks: int = 0
-    role: str | None = None  # "owner" | "editor" | "viewer" for display (owner = mine, editor/viewer = shared)
+    role: str | None = None
+    overdue_count: int = 0
+    due_soon_count: int = 0
 
     class Config:
         from_attributes = True

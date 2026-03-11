@@ -1,8 +1,14 @@
 "use client";
 
 import { useState } from "react";
-import { Task, TaskStatus, TaskPriority } from "@/lib/api";
+import { Task, TaskStatus, TaskPriority, AssignableUser } from "@/lib/api";
 
+const ISSUE_TYPE_LABELS: Record<string, string> = {
+  task: "Task",
+  bug: "Bug",
+  story: "Story",
+  subtask: "Sub-task",
+};
 const PRIORITY_LABELS: Record<TaskPriority, string> = {
   low: "Low",
   medium: "Medium",
@@ -28,10 +34,36 @@ function formatDueDate(iso: string | null | undefined): string {
   return isNaN(d.getTime()) ? "" : d.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
 }
 
+const DUE_SOON_DAYS = 3;
+function getDueStatus(dueDate: string | null | undefined): "overdue" | "due_soon" | "ok" | null {
+  if (!dueDate) return null;
+  const d = new Date(dueDate);
+  if (isNaN(d.getTime())) return null;
+  d.setHours(0, 0, 0, 0);
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const todayTime = today.getTime();
+  const dueTime = d.getTime();
+  if (dueTime < todayTime) return "overdue";
+  const daysDiff = Math.ceil((dueTime - todayTime) / (24 * 60 * 60 * 1000));
+  if (daysDiff <= DUE_SOON_DAYS) return "due_soon";
+  return "ok";
+}
+function dueInDays(dueDate: string | null | undefined): number | null {
+  if (!dueDate) return null;
+  const d = new Date(dueDate);
+  if (isNaN(d.getTime())) return null;
+  d.setHours(0, 0, 0, 0);
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  return Math.ceil((d.getTime() - today.getTime()) / (24 * 60 * 60 * 1000));
+}
+
 type TaskCardProps = {
   task: Task;
   workflowId: number;
   canEdit?: boolean;
+  assignableUsers?: AssignableUser[];
   onDragStart: () => void;
   onDragEnd: () => void;
   onUpdate: (updates: {
@@ -42,11 +74,13 @@ type TaskCardProps = {
     priority?: TaskPriority;
     due_date?: string | null;
     labels?: string[];
+    issue_type?: string;
+    assignee_id?: number | null;
   }) => void;
   onDelete: () => void;
 };
 
-export function TaskCard({ task, workflowId, canEdit = true, onDragStart, onDragEnd, onUpdate, onDelete }: TaskCardProps) {
+export function TaskCard({ task, workflowId, canEdit = true, assignableUsers = [], onDragStart, onDragEnd, onUpdate, onDelete }: TaskCardProps) {
   const [editing, setEditing] = useState(false);
   const [title, setTitle] = useState(task.title);
   const [description, setDescription] = useState(task.description);
@@ -54,6 +88,8 @@ export function TaskCard({ task, workflowId, canEdit = true, onDragStart, onDrag
   const [priority, setPriority] = useState<TaskPriority>(task.priority ?? "medium");
   const [dueDate, setDueDate] = useState(task.due_date ?? "");
   const [labelsStr, setLabelsStr] = useState((task.labels ?? []).join(", "));
+  const [issueType, setIssueType] = useState(task.issue_type ?? "task");
+  const [assigneeId, setAssigneeId] = useState<number | null>(task.assignee_id ?? null);
 
   const saveEdit = () => {
     if (title.trim()) {
@@ -65,6 +101,8 @@ export function TaskCard({ task, workflowId, canEdit = true, onDragStart, onDrag
         priority,
         due_date: dueDate.trim() || null,
         labels,
+        issue_type: issueType,
+        assignee_id: assigneeId,
       });
     }
     setEditing(false);
@@ -126,6 +164,35 @@ export function TaskCard({ task, workflowId, canEdit = true, onDragStart, onDrag
               />
             </div>
           </div>
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <label className="block text-xs text-muted mb-0.5">Issue type</label>
+              <select
+                value={issueType}
+                onChange={(e) => setIssueType(e.target.value)}
+                className="input-field text-sm py-1.5"
+              >
+                {Object.entries(ISSUE_TYPE_LABELS).map(([k, v]) => (
+                  <option key={k} value={k}>{v}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs text-muted mb-0.5">Assignee</label>
+              <select
+                value={assigneeId ?? ""}
+                onChange={(e) => setAssigneeId(e.target.value ? Number(e.target.value) : null)}
+                className="input-field text-sm py-1.5"
+              >
+                <option value="">Unassigned</option>
+                {assignableUsers.map((u) => (
+                  <option key={u.id} value={u.id}>
+                    {u.display_name?.trim() || u.email}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
           <div>
             <label className="block text-xs text-muted mb-0.5">Labels (comma-separated)</label>
             <input
@@ -149,6 +216,8 @@ export function TaskCard({ task, workflowId, canEdit = true, onDragStart, onDrag
                 setPriority(task.priority ?? "medium");
                 setDueDate(task.due_date ?? "");
                 setLabelsStr((task.labels ?? []).join(", "));
+                setIssueType(task.issue_type ?? "task");
+                setAssigneeId(task.assignee_id ?? null);
                 setEditing(false);
               }}
               className="btn-secondary text-sm py-1.5"
@@ -159,22 +228,54 @@ export function TaskCard({ task, workflowId, canEdit = true, onDragStart, onDrag
         </div>
       ) : (
         <>
-          <div className="flex items-start justify-between gap-2">
+          <div className="flex items-start justify-between gap-2 flex-wrap">
             <span className="text-[10px] font-medium text-muted shrink-0">TASK-{task.id}</span>
-            <span
-              className={`badge shrink-0 ${PRIORITY_CLASSES[taskPriority]}`}
-              title="Priority"
-            >
-              {PRIORITY_LABELS[taskPriority]}
-            </span>
+            <div className="flex items-center gap-1.5 flex-wrap justify-end">
+              <span className="badge bg-[#344563] text-slate-300 text-[10px] shrink-0">
+                {ISSUE_TYPE_LABELS[task.issue_type ?? "task"] ?? task.issue_type ?? "Task"}
+              </span>
+              <span
+                className={`badge shrink-0 ${PRIORITY_CLASSES[taskPriority]}`}
+                title="Priority"
+              >
+                {PRIORITY_LABELS[taskPriority]}
+              </span>
+            </div>
           </div>
           <p className="text-slate-100 font-medium text-sm mt-0.5 flex-1 min-w-0">{task.title}</p>
+          {task.assignee_name && (
+            <p className="text-muted text-[11px] mt-0.5">👤 {task.assignee_name}</p>
+          )}
           {task.description && (
             <p className="text-muted text-xs mt-1 line-clamp-2">{task.description}</p>
           )}
           {task.due_date && (
-            <p className="text-muted text-xs mt-1" title="Due date">
-              📅 {formatDueDate(task.due_date)}
+            <div className="flex items-center gap-2 mt-1 flex-wrap">
+              <span
+                className={`text-xs ${
+                  getDueStatus(task.due_date) === "overdue"
+                    ? "text-red-400 font-medium"
+                    : getDueStatus(task.due_date) === "due_soon"
+                      ? "text-amber-400"
+                      : "text-muted"
+                }`}
+                title="Due date"
+              >
+                📅 {formatDueDate(task.due_date)}
+              </span>
+              {task.status !== "completed" && getDueStatus(task.due_date) === "overdue" && (
+                <span className="badge bg-red-500/30 text-red-300 text-[10px]">Overdue</span>
+              )}
+              {task.status !== "completed" && getDueStatus(task.due_date) === "due_soon" && (
+                <span className="badge bg-amber-500/20 text-amber-400 text-[10px]">
+                  Due in {dueInDays(task.due_date)} day{(dueInDays(task.due_date) ?? 0) !== 1 ? "s" : ""}
+                </span>
+              )}
+            </div>
+          )}
+          {task.updated_at && (
+            <p className="text-muted text-[10px] mt-0.5">
+              Updated {new Date(task.updated_at).toLocaleDateString(undefined, { month: "short", day: "numeric" })}
             </p>
           )}
           {(task.labels?.length ?? 0) > 0 && (

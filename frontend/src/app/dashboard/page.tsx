@@ -192,9 +192,21 @@ export default function DashboardPage() {
                           style={{ width: `${pct}%` }}
                         />
                       </div>
-                      <p className="text-muted text-[11px] mt-2">
-                        {new Date(w.created_at).toLocaleDateString()}
-                      </p>
+                      <div className="flex items-center gap-2 mt-2 flex-wrap">
+                        <p className="text-muted text-[11px]">
+                          {new Date(w.created_at).toLocaleDateString()}
+                        </p>
+                        {(w.overdue_count ?? 0) > 0 && (
+                          <span className="badge bg-red-500/20 text-red-400 text-[10px]">
+                            {w.overdue_count} overdue
+                          </span>
+                        )}
+                        {(w.due_soon_count ?? 0) > 0 && (
+                          <span className="badge bg-amber-500/20 text-amber-400 text-[10px]">
+                            {w.due_soon_count} due soon
+                          </span>
+                        )}
+                      </div>
                     </Link>
                     <div
                       className="absolute top-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition"

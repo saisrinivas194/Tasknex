@@ -28,11 +28,25 @@ class User(Base):
     display_name = Column(String(255), nullable=True)
     bio = Column(Text, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
+    token_version = Column(Integer, default=0, nullable=False)  # unused; kept for migration compat
 
+    sessions = relationship("Session", back_populates="user", cascade="all, delete-orphan")
     workflows = relationship("Workflow", back_populates="user", cascade="all, delete-orphan")
     owned_teams = relationship("Team", back_populates="owner", foreign_keys="Team.owner_id")
     team_memberships = relationship("TeamMember", back_populates="user", cascade="all, delete-orphan")
     workflow_shares = relationship("WorkflowShare", back_populates="user", foreign_keys="WorkflowShare.user_id")
+
+
+class Session(Base):
+    __tablename__ = "sessions"
+
+    id = Column(String(36), primary_key=True)  # UUID
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    last_used_at = Column(DateTime, nullable=True)
+    label = Column(String(255), nullable=True)  # e.g. "Chrome on Mac"
+
+    user = relationship("User", back_populates="sessions")
 
 
 class Team(Base):
@@ -88,6 +102,12 @@ class Workflow(Base):
     title = Column(String(500), nullable=False)
     goal = Column(Text, nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow)
+    # Jira-style: custom column labels and defaults
+    status_planned_label = Column(String(100), nullable=True)      # e.g. "To Do", "Backlog"
+    status_in_progress_label = Column(String(100), nullable=True)  # e.g. "In Progress"
+    status_completed_label = Column(String(100), nullable=True)    # e.g. "Done"
+    default_issue_type = Column(String(20), default="task", nullable=False)
+    default_priority = Column(String(20), nullable=True)  # override for new tasks
 
     user = relationship("User", back_populates="workflows")
     steps = relationship("Step", back_populates="workflow", order_by="Step.step_order", cascade="all, delete-orphan")
@@ -118,6 +138,10 @@ class Task(Base):
     priority = Column(String(20), default=TaskPriority.medium.value, nullable=False)
     due_date = Column(Date, nullable=True)
     labels = Column(Text, nullable=True)  # comma-separated labels (Jira-style)
+    issue_type = Column(String(20), default="task", nullable=False)  # task | bug | story | subtask
+    assignee_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
     step = relationship("Step", back_populates="tasks")
+    assignee = relationship("User", foreign_keys=[assignee_id])

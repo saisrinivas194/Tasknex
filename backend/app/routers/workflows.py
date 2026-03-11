@@ -1,3 +1,5 @@
+from datetime import date, timedelta
+
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, delete, or_
@@ -19,12 +21,23 @@ from app.schemas import (
     AIAssistantRequest,
     WorkflowShareRequest,
     WorkflowShareResponse,
+    AssignableUserResponse,
 )
 from app.auth import get_current_user
 from app.services.ai_workflow import generate_workflow_from_goal, ai_assistant_add_tasks
 from app.workflow_access import get_workflow_and_access
 
 router = APIRouter(prefix="/workflows", tags=["workflows"])
+
+VALID_ISSUE_TYPES = {"task", "bug", "story", "subtask"}
+
+
+def _task_to_response(task: Task) -> TaskResponse:
+    data = TaskResponse.model_validate(task)
+    assignee_name = None
+    if getattr(task, "assignee", None) and task.assignee:
+        assignee_name = task.assignee.display_name or task.assignee.email
+    return data.model_copy(update={"assignee_name": assignee_name})
 
 
 @router.post("/generate", response_model=WorkflowResponse)
@@ -117,6 +130,37 @@ async def list_workflows(
         workflows_to_list = owned_list + shared_list
         workflows_to_list.sort(key=lambda w: w.created_at, reverse=True)
     workflows_to_list = workflows_to_list[skip : skip + limit]
+    wids = [w.id for w in workflows_to_list]
+    today = date.today()
+    due_soon_end = today + timedelta(days=3)
+    overdue_map: dict[int, int] = {}
+    due_soon_map: dict[int, int] = {}
+    if wids:
+        overdue_q = (
+            select(Step.workflow_id, func.count(Task.id).label("c"))
+            .select_from(Task)
+            .join(Step, Task.step_id == Step.id)
+            .where(Step.workflow_id.in_(wids), Task.due_date < today, Task.status != TaskStatus.completed)
+            .group_by(Step.workflow_id)
+        )
+        overdue_res = await db.execute(overdue_q)
+        for row in overdue_res.all():
+            overdue_map[row[0]] = row[1]
+        due_soon_q = (
+            select(Step.workflow_id, func.count(Task.id).label("c"))
+            .select_from(Task)
+            .join(Step, Task.step_id == Step.id)
+            .where(
+                Step.workflow_id.in_(wids),
+                Task.due_date >= today,
+                Task.due_date <= due_soon_end,
+                Task.status != TaskStatus.completed,
+            )
+            .group_by(Step.workflow_id)
+        )
+        due_soon_res = await db.execute(due_soon_q)
+        for row in due_soon_res.all():
+            due_soon_map[row[0]] = row[1]
     out = []
     for w in workflows_to_list:
         tasks_result = await db.execute(
@@ -134,6 +178,8 @@ async def list_workflows(
                 total_tasks=total or 0,
                 completed_tasks=completed or 0,
                 role=role_map.get(w.id, "owner"),
+                overdue_count=overdue_map.get(w.id, 0),
+                due_soon_count=due_soon_map.get(w.id, 0),
             )
         )
     return out
@@ -151,10 +197,22 @@ async def get_workflow(
     result = await db.execute(
         select(Workflow)
         .where(Workflow.id == workflow_id)
-        .options(selectinload(Workflow.steps).selectinload(Step.tasks))
+        .options(selectinload(Workflow.steps).selectinload(Step.tasks).selectinload(Task.assignee))
     )
     workflow = result.scalar_one()
-    return WorkflowResponse.model_validate(workflow).model_copy(update={"role": role})
+    steps_data = [
+        StepResponse(
+            id=s.id,
+            workflow_id=s.workflow_id,
+            title=s.title,
+            step_order=s.step_order,
+            tasks=[_task_to_response(t) for t in s.tasks],
+        )
+        for s in workflow.steps
+    ]
+    return WorkflowResponse.model_validate(workflow).model_copy(
+        update={"steps": steps_data, "role": role}
+    )
 
 
 @router.patch("/{workflow_id}", response_model=WorkflowResponse)
@@ -169,14 +227,34 @@ async def update_workflow(
         raise HTTPException(status_code=404 if not workflow else 403, detail="Workflow not found" if not workflow else "Cannot edit this workflow")
     workflow.title = body.title
     workflow.goal = body.goal
+    if hasattr(body, "status_planned_label"):
+        workflow.status_planned_label = body.status_planned_label
+        workflow.status_in_progress_label = body.status_in_progress_label
+        workflow.status_completed_label = body.status_completed_label
+        default_type = (body.default_issue_type or "task").strip().lower() or "task"
+        workflow.default_issue_type = default_type if default_type in VALID_ISSUE_TYPES else "task"
+        workflow.default_priority = body.default_priority
     await db.commit()
     await db.refresh(workflow)
     result = await db.execute(
         select(Workflow)
         .where(Workflow.id == workflow_id)
-        .options(selectinload(Workflow.steps).selectinload(Step.tasks))
+        .options(selectinload(Workflow.steps).selectinload(Step.tasks).selectinload(Task.assignee))
     )
-    return WorkflowResponse.model_validate(result.scalar_one())
+    w = result.scalar_one()
+    steps_data = [
+        StepResponse(
+            id=s.id,
+            workflow_id=s.workflow_id,
+            title=s.title,
+            step_order=s.step_order,
+            tasks=[_task_to_response(t) for t in s.tasks],
+        )
+        for s in w.steps
+    ]
+    return WorkflowResponse.model_validate(w).model_copy(
+        update={"steps": steps_data, "role": role}
+    )
 
 
 @router.delete("/{workflow_id}", status_code=204)
@@ -300,6 +378,11 @@ async def duplicate_workflow(
         user_id=current_user.id,
         title=workflow.title + " (copy)",
         goal=workflow.goal,
+        status_planned_label=workflow.status_planned_label,
+        status_in_progress_label=workflow.status_in_progress_label,
+        status_completed_label=workflow.status_completed_label,
+        default_issue_type=getattr(workflow, "default_issue_type", "task") or "task",
+        default_priority=workflow.default_priority,
     )
     db.add(new_workflow)
     await db.flush()
@@ -321,6 +404,8 @@ async def duplicate_workflow(
                 priority=task.priority,
                 due_date=task.due_date,
                 labels=task.labels,
+                issue_type=getattr(task, "issue_type", "task") or "task",
+                assignee_id=None,
             ))
     await db.commit()
     result = await db.execute(
@@ -346,7 +431,7 @@ async def add_step(
     db.add(step)
     await db.commit()
     await db.refresh(step)
-    return StepResponse.model_validate(step)
+    return StepResponse(id=step.id, workflow_id=step.workflow_id, title=step.title, step_order=step.step_order, tasks=[])
 
 
 @router.patch("/{workflow_id}/steps/{step_id}", response_model=StepResponse)
@@ -369,7 +454,41 @@ async def update_step_order(
     step.step_order = body.step_order
     await db.commit()
     await db.refresh(step)
-    return StepResponse.model_validate(step)
+    return StepResponse(id=step.id, workflow_id=step.workflow_id, title=step.title, step_order=step.step_order, tasks=[])
+
+
+# Assignable users (owner + shared users + team members of shared teams)
+async def _assignable_user_ids(db: AsyncSession, workflow_id: int, current_user_id: int) -> set[int]:
+    workflow_result = await db.execute(select(Workflow).where(Workflow.id == workflow_id))
+    w = workflow_result.scalar_one_or_none()
+    if not w:
+        return set()
+    ids = {w.user_id}
+    shares = await db.execute(select(WorkflowShare).where(WorkflowShare.workflow_id == workflow_id))
+    for s in shares.scalars().all():
+        if s.user_id:
+            ids.add(s.user_id)
+        if s.team_id:
+            members = await db.execute(select(TeamMember.user_id).where(TeamMember.team_id == s.team_id))
+            for (uid,) in members.all():
+                ids.add(uid)
+    return ids
+
+
+@router.get("/{workflow_id}/assignable-users", response_model=list[AssignableUserResponse])
+async def list_assignable_users(
+    workflow_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    _, role = await get_workflow_and_access(db, current_user.id, workflow_id)
+    if not role:
+        raise HTTPException(status_code=404, detail="Workflow not found")
+    ids = await _assignable_user_ids(db, workflow_id, current_user.id)
+    if not ids:
+        return []
+    result = await db.execute(select(User).where(User.id.in_(ids)).order_by(User.display_name, User.email))
+    return [AssignableUserResponse(id=u.id, email=u.email, display_name=u.display_name) for u in result.scalars().all()]
 
 
 # Tasks
@@ -380,12 +499,19 @@ async def add_task(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    _, role = await get_workflow_and_access(db, current_user.id, workflow_id)
+    workflow, role = await get_workflow_and_access(db, current_user.id, workflow_id)
     if not role or role not in ("owner", "editor"):
         raise HTTPException(status_code=404 if not role else 403, detail="Workflow not found" if not role else "Cannot edit this workflow")
     step_result = await db.execute(select(Step).where(Step.id == body.step_id, Step.workflow_id == workflow_id))
     if not step_result.scalar_one_or_none():
         raise HTTPException(status_code=404, detail="Step not found")
+    assignable = await _assignable_user_ids(db, workflow_id, current_user.id)
+    if body.assignee_id is not None and body.assignee_id not in assignable:
+        raise HTTPException(status_code=400, detail="Assignee does not have access to this workflow")
+    issue_type = (body.issue_type or getattr(workflow, "default_issue_type", None) or "task").strip().lower()
+    if issue_type not in VALID_ISSUE_TYPES:
+        issue_type = "task"
+    priority = body.priority.value if body.priority else (getattr(workflow, "default_priority", None) or TaskPriority.medium.value)
     labels_str = ",".join(x.strip() for x in (body.labels or []) if x.strip()) or None
     task = Task(
         step_id=body.step_id,
@@ -393,14 +519,16 @@ async def add_task(
         description=body.description or "",
         document_url=body.document_url,
         status=body.status,
-        priority=body.priority.value,
+        priority=priority,
         due_date=body.due_date,
         labels=labels_str,
+        issue_type=issue_type,
+        assignee_id=body.assignee_id,
     )
     db.add(task)
     await db.commit()
-    await db.refresh(task)
-    return TaskResponse.model_validate(task)
+    task_result = await db.execute(select(Task).where(Task.id == task.id).options(selectinload(Task.assignee)))
+    return _task_to_response(task_result.scalar_one())
 
 
 @router.patch("/{workflow_id}/tasks/{task_id}", response_model=TaskResponse)
@@ -434,9 +562,17 @@ async def update_task(
         task.due_date = body.due_date
     if body.labels is not None:
         task.labels = ",".join(x.strip() for x in body.labels if x.strip()) or None
+    if body.issue_type is not None:
+        task.issue_type = body.issue_type if body.issue_type in VALID_ISSUE_TYPES else task.issue_type
+    if body.assignee_id is not None:
+        assignable = await _assignable_user_ids(db, workflow_id, current_user.id)
+        if body.assignee_id not in assignable:
+            raise HTTPException(status_code=400, detail="Assignee does not have access to this workflow")
+        task.assignee_id = body.assignee_id
     await db.commit()
     await db.refresh(task)
-    return TaskResponse.model_validate(task)
+    task_with_assignee = await db.execute(select(Task).where(Task.id == task.id).options(selectinload(Task.assignee)))
+    return _task_to_response(task_with_assignee.scalar_one())
 
 
 @router.delete("/{workflow_id}/tasks/{task_id}", status_code=204)

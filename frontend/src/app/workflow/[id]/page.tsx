@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter, useParams } from "next/navigation";
 import Link from "next/link";
 import { useAuth } from "@/components/AuthProvider";
-import { api, Workflow, Task, TaskStatus, WorkflowShare, Team } from "@/lib/api";
+import { api, Workflow, Task, TaskStatus, WorkflowShare, Team, AssignableUser } from "@/lib/api";
 import { TaskBoard } from "@/components/TaskBoard";
 import { Sidebar } from "@/components/Sidebar";
 import { Spinner } from "@/components/Spinner";
@@ -29,6 +29,7 @@ export default function WorkflowPage() {
   const [inviteRole, setInviteRole] = useState<"viewer" | "editor">("viewer");
   const [sharing, setSharing] = useState(false);
   const [removingShareId, setRemovingShareId] = useState<number | null>(null);
+  const [assignableUsers, setAssignableUsers] = useState<AssignableUser[]>([]);
 
   const refresh = () => {
     if (!id || id < 1) {
@@ -43,10 +44,12 @@ export default function WorkflowPage() {
       .then((w) => {
         setWorkflow(w);
         setError("");
+        api.workflows.assignableUsers(id).then(setAssignableUsers).catch(() => setAssignableUsers([]));
       })
       .catch((e) => {
         setError(e.message);
         setWorkflow(null);
+        setAssignableUsers([]);
       })
       .finally(() => setLoading(false));
   };
@@ -280,6 +283,7 @@ export default function WorkflowPage() {
             onTaskUpdate={onTaskUpdate}
             onRefresh={refresh}
             canEdit={workflow.role !== "viewer"}
+            assignableUsers={assignableUsers}
           />
         </div>
       </main>

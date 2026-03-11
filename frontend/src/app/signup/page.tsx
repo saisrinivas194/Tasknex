@@ -11,10 +11,14 @@ const MIN_PASSWORD_LENGTH = 8;
 
 function getFriendlyError(message: string): string {
   if (message.includes("already registered") || message.includes("already exists"))
-    return "This email is already registered. Try logging in or use a different email.";
+    return "This email is already registered. Log in instead or use a different email.";
   if (message.includes("at least 8"))
     return "Password must be at least 8 characters.";
   return message || "Something went wrong. Please try again.";
+}
+
+function isEmailAlreadyExistsError(message: string): boolean {
+  return message.includes("already registered") || message.includes("already exists");
 }
 
 export default function SignupPage() {
@@ -81,10 +85,18 @@ export default function SignupPage() {
         <form onSubmit={handleSubmit} className="space-y-5">
           {error && (
             <div
-              className="text-red-400 text-sm bg-red-500/10 border border-red-500/30 rounded-lg px-3 py-2.5"
+              className="text-red-400 text-sm bg-red-500/10 border border-red-500/30 rounded-lg px-3 py-2.5 space-y-2"
               role="alert"
             >
-              {error}
+              <p>{error}</p>
+              {isEmailAlreadyExistsError(error) && (
+                <Link
+                  href="/login"
+                  className="inline-block text-primary hover:underline font-medium text-sm"
+                >
+                  Go to log in →
+                </Link>
+              )}
             </div>
           )}
 

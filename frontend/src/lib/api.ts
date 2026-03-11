@@ -16,8 +16,18 @@ export type User = {
   bio?: string | null;
   created_at: string;
 };
+
+export type Session = {
+  id: string;
+  created_at: string;
+  last_used_at: string | null;
+  label: string | null;
+  current: boolean;
+};
+
 export type TaskStatus = "planned" | "in_progress" | "completed";
 export type TaskPriority = "low" | "medium" | "high" | "critical";
+export type IssueType = "task" | "bug" | "story" | "subtask";
 export type Task = {
   id: number;
   step_id: number;
@@ -28,7 +38,11 @@ export type Task = {
   priority?: TaskPriority;
   due_date?: string | null;
   labels?: string[];
+  issue_type?: IssueType | string;
+  assignee_id?: number | null;
+  assignee_name?: string | null;
   created_at: string;
+  updated_at?: string | null;
 };
 export type Step = {
   id: number;
@@ -44,7 +58,17 @@ export type Workflow = {
   goal: string;
   created_at: string;
   steps: Step[];
-  role?: string | null; // "owner" | "editor" | "viewer"
+  role?: string | null;
+  status_planned_label?: string | null;
+  status_in_progress_label?: string | null;
+  status_completed_label?: string | null;
+  default_issue_type?: string;
+  default_priority?: string | null;
+};
+export type AssignableUser = {
+  id: number;
+  email: string;
+  display_name?: string | null;
 };
 export type WorkflowListItem = {
   id: number;
@@ -53,7 +77,9 @@ export type WorkflowListItem = {
   created_at: string;
   total_tasks: number;
   completed_tasks: number;
-  role?: string | null; // "owner" | "editor" | "viewer"
+  role?: string | null;
+  overdue_count?: number;
+  due_soon_count?: number;
 };
 
 export type Team = {
@@ -112,6 +138,13 @@ async function request<T>(
         : typeof err.detail === "string"
           ? err.detail
           : JSON.stringify(err.detail ?? err);
+    // Session revoked or invalid
+    if (res.status === 401 && (String(message).toLowerCase().includes("elsewhere") || String(message).toLowerCase().includes("revoked"))) {
+      if (typeof window !== "undefined") {
+        localStorage.removeItem("token");
+        window.location.href = "/login";
+      }
+    }
     throw new Error(message);
   }
   if (res.status === 204) return undefined as T;
@@ -138,6 +171,13 @@ export const api = {
         method: "PATCH",
         body: JSON.stringify(data),
       }),
+    sessions: {
+      list: () => request<Session[]>("/auth/sessions"),
+      revoke: (sessionId: string) =>
+        request<void>(`/auth/sessions/${sessionId}`, { method: "DELETE" }),
+      revokeOthers: () =>
+        request<void>("/auth/sessions/revoke-others", { method: "POST" }),
+    },
   },
   workflows: {
     list: () => request<WorkflowListItem[]>("/workflows"),
@@ -147,11 +187,24 @@ export const api = {
         method: "POST",
         body: JSON.stringify({ goal }),
       }),
-    update: (id: number, data: { title: string; goal: string }) =>
+    update: (
+      id: number,
+      data: {
+        title: string;
+        goal: string;
+        status_planned_label?: string | null;
+        status_in_progress_label?: string | null;
+        status_completed_label?: string | null;
+        default_issue_type?: string;
+        default_priority?: string | null;
+      }
+    ) =>
       request<Workflow>(`/workflows/${id}`, {
         method: "PATCH",
         body: JSON.stringify(data),
       }),
+    assignableUsers: (workflowId: number) =>
+      request<AssignableUser[]>(`/workflows/${workflowId}/assignable-users`),
     delete: (id: number) =>
       request<void>(`/workflows/${id}`, { method: "DELETE" }),
     duplicate: (id: number) =>
@@ -193,7 +246,9 @@ export const api = {
       document_url?: string | null,
       priority?: TaskPriority,
       due_date?: string | null,
-      labels?: string[]
+      labels?: string[],
+      issue_type?: IssueType | string,
+      assignee_id?: number | null
     ) =>
       request<Task>(`/workflows/${workflowId}/tasks`, {
         method: "POST",
@@ -206,6 +261,8 @@ export const api = {
           priority: priority ?? "medium",
           due_date: due_date ?? null,
           labels: labels ?? [],
+          issue_type: issue_type ?? "task",
+          assignee_id: assignee_id ?? null,
         }),
       }),
     updateTask: (
@@ -219,6 +276,8 @@ export const api = {
         priority?: TaskPriority;
         due_date?: string | null;
         labels?: string[];
+        issue_type?: IssueType | string;
+        assignee_id?: number | null;
       }
     ) =>
       request<Task>(`/workflows/${workflowId}/tasks/${taskId}`, {

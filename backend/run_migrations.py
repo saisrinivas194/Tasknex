@@ -33,6 +33,7 @@ MIGRATIONS = [
     "UPDATE tasks SET priority = 'medium' WHERE priority IS NULL;",
     "ALTER TABLE users ADD COLUMN IF NOT EXISTS display_name VARCHAR(255);",
     "ALTER TABLE users ADD COLUMN IF NOT EXISTS bio TEXT;",
+    "ALTER TABLE users ADD COLUMN IF NOT EXISTS token_version INTEGER DEFAULT 0 NOT NULL;",
     """CREATE TABLE IF NOT EXISTS teams (
         id SERIAL PRIMARY KEY,
         name VARCHAR(255) NOT NULL,
@@ -55,6 +56,21 @@ MIGRATIONS = [
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         CHECK ((user_id IS NOT NULL AND team_id IS NULL) OR (user_id IS NULL AND team_id IS NOT NULL))
     );""",
+    """CREATE TABLE IF NOT EXISTS sessions (
+        id VARCHAR(36) PRIMARY KEY,
+        user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        last_used_at TIMESTAMP,
+        label VARCHAR(255)
+    );""",
+    "ALTER TABLE workflows ADD COLUMN IF NOT EXISTS status_planned_label VARCHAR(100);",
+    "ALTER TABLE workflows ADD COLUMN IF NOT EXISTS status_in_progress_label VARCHAR(100);",
+    "ALTER TABLE workflows ADD COLUMN IF NOT EXISTS status_completed_label VARCHAR(100);",
+    "ALTER TABLE workflows ADD COLUMN IF NOT EXISTS default_issue_type VARCHAR(20) DEFAULT 'task' NOT NULL;",
+    "ALTER TABLE workflows ADD COLUMN IF NOT EXISTS default_priority VARCHAR(20);",
+    "ALTER TABLE tasks ADD COLUMN IF NOT EXISTS issue_type VARCHAR(20) DEFAULT 'task' NOT NULL;",
+    "ALTER TABLE tasks ADD COLUMN IF NOT EXISTS assignee_id INTEGER REFERENCES users(id) ON DELETE SET NULL;",
+    "ALTER TABLE tasks ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP;",
 ]
 
 

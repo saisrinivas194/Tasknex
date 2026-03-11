@@ -1,8 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Workflow } from "@/lib/api";
 import { api } from "@/lib/api";
+
+const ISSUE_TYPES = ["task", "bug", "story", "subtask"] as const;
+const PRIORITIES = ["low", "medium", "high", "critical"] as const;
 
 type WorkflowEditorProps = {
   workflow: Workflow;
@@ -13,15 +16,38 @@ type WorkflowEditorProps = {
 export function WorkflowEditor({ workflow, onClose, onSaved }: WorkflowEditorProps) {
   const [title, setTitle] = useState(workflow.title);
   const [goal, setGoal] = useState(workflow.goal);
+  const [statusPlannedLabel, setStatusPlannedLabel] = useState(workflow.status_planned_label ?? "");
+  const [statusInProgressLabel, setStatusInProgressLabel] = useState(workflow.status_in_progress_label ?? "");
+  const [statusCompletedLabel, setStatusCompletedLabel] = useState(workflow.status_completed_label ?? "");
+  const [defaultIssueType, setDefaultIssueType] = useState(workflow.default_issue_type ?? "task");
+  const [defaultPriority, setDefaultPriority] = useState(workflow.default_priority ?? "");
   const [newPhaseName, setNewPhaseName] = useState("");
   const [newTaskStepId, setNewTaskStepId] = useState<number | null>(null);
   const [newTaskTitle, setNewTaskTitle] = useState("");
   const [saving, setSaving] = useState(false);
 
+  useEffect(() => {
+    setTitle(workflow.title);
+    setGoal(workflow.goal);
+    setStatusPlannedLabel(workflow.status_planned_label ?? "");
+    setStatusInProgressLabel(workflow.status_in_progress_label ?? "");
+    setStatusCompletedLabel(workflow.status_completed_label ?? "");
+    setDefaultIssueType(workflow.default_issue_type ?? "task");
+    setDefaultPriority(workflow.default_priority ?? "");
+  }, [workflow]);
+
   const saveWorkflow = async () => {
     setSaving(true);
     try {
-      await api.workflows.update(workflow.id, { title, goal });
+      await api.workflows.update(workflow.id, {
+        title,
+        goal,
+        status_planned_label: statusPlannedLabel.trim() || null,
+        status_in_progress_label: statusInProgressLabel.trim() || null,
+        status_completed_label: statusCompletedLabel.trim() || null,
+        default_issue_type: defaultIssueType,
+        default_priority: defaultPriority.trim() || null,
+      });
       onSaved();
     } finally {
       setSaving(false);
@@ -73,6 +99,66 @@ export function WorkflowEditor({ workflow, onClose, onSaved }: WorkflowEditorPro
               onChange={(e) => setGoal(e.target.value)}
               className="input-field min-h-[80px] resize-y"
             />
+          </div>
+          <div className="rounded bg-[#253858]/50 border border-[#253858] p-4 space-y-3">
+            <h3 className="text-sm font-semibold text-white">Board settings (Jira-style)</h3>
+            <p className="text-muted text-xs">Customize column names and defaults for new tasks.</p>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+              <div>
+                <label className="block text-xs text-muted mb-0.5">Planned column</label>
+                <input
+                  value={statusPlannedLabel}
+                  onChange={(e) => setStatusPlannedLabel(e.target.value)}
+                  className="input-field text-sm"
+                  placeholder="e.g. To Do"
+                />
+              </div>
+              <div>
+                <label className="block text-xs text-muted mb-0.5">In progress column</label>
+                <input
+                  value={statusInProgressLabel}
+                  onChange={(e) => setStatusInProgressLabel(e.target.value)}
+                  className="input-field text-sm"
+                  placeholder="e.g. In Progress"
+                />
+              </div>
+              <div>
+                <label className="block text-xs text-muted mb-0.5">Completed column</label>
+                <input
+                  value={statusCompletedLabel}
+                  onChange={(e) => setStatusCompletedLabel(e.target.value)}
+                  className="input-field text-sm"
+                  placeholder="e.g. Done"
+                />
+              </div>
+            </div>
+            <div className="flex gap-4 flex-wrap">
+              <div>
+                <label className="block text-xs text-muted mb-0.5">Default issue type</label>
+                <select
+                  value={defaultIssueType}
+                  onChange={(e) => setDefaultIssueType(e.target.value)}
+                  className="input-field text-sm"
+                >
+                  {ISSUE_TYPES.map((t) => (
+                    <option key={t} value={t}>{t}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs text-muted mb-0.5">Default priority</label>
+                <select
+                  value={defaultPriority}
+                  onChange={(e) => setDefaultPriority(e.target.value)}
+                  className="input-field text-sm"
+                >
+                  <option value="">—</option>
+                  {PRIORITIES.map((p) => (
+                    <option key={p} value={p}>{p}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
           </div>
           <div>
             <label className="block text-sm font-medium text-slate-300 mb-1">Add phase</label>
