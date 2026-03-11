@@ -120,6 +120,7 @@ export default function WorkflowPage() {
   const progress = totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0;
 
   function exportMarkdown() {
+    if (!workflow) return;
     const lines: string[] = [`# ${workflow.title}`, "", `**Goal:** ${workflow.goal}`, ""];
     workflow.steps.forEach((step) => {
       lines.push(`## ${step.title}`, "");
