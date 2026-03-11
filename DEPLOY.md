@@ -20,6 +20,10 @@ Deploy the **backend** (FastAPI + PostgreSQL) and **frontend** (Next.js) as two 
 
 ## 2. Deploy the backend
 
+> **If you see:** `Railpack could not determine how to build the app` and the build shows `./` with `backend/`, `frontend/`, etc., the service is building from the **repo root** instead of the backend folder. Fix: set **Root Directory** to **`backend`** (step 2.2 below). Then trigger a new deploy.
+
+> **If you see:** `Failed building wheel for asyncpg` or `Failed building wheel for pydantic-core` with Python 3.13, the build is using Python 3.13 (which these packages don’t support yet). The repo has `backend/runtime.txt` and `backend/.python-version` set to **3.12** so Railway uses Python 3.12. If the error persists, in the backend service add a **Variable**: `RAILPACK_PYTHON_VERSION` = `3.12`, then redeploy.
+
 ### 2.1 Add the service from GitHub
 
 1. In your Railway project (the same one where you added PostgreSQL), click **"+ New"** (or **"New"**).
@@ -41,7 +45,7 @@ Your repo has both `backend` and `frontend`. For this service we want only the *
    ```
 6. Save if there’s a **Save** or **Update** button. Railway will redeploy using the `backend` folder as the project root.
 
-**Why:** The app code (e.g. `app/main.py`) lives inside `backend/`. If Root Directory is empty, Railway looks at the repo root and won’t find `app`, so the build can fail.
+**Why:** The app code (e.g. `app/main.py`) lives inside `backend/`. If Root Directory is empty, Railway looks at the repo root, Railpack sees both `backend/` and `frontend/` and cannot detect a single app, and the build fails with "could not determine how to build the app". Setting it to `backend` makes Railpack see only `requirements.txt` and `app/`, so it detects Python and builds correctly.
 
 ### 2.3 Set the Start Command (how the app runs)
 
