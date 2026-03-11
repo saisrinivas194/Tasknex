@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/components/AuthProvider";
 import { Sidebar } from "@/components/Sidebar";
+import { Spinner } from "@/components/Spinner";
 import { api, WorkflowListItem } from "@/lib/api";
 
 export default function DashboardPage() {
@@ -76,16 +77,17 @@ export default function DashboardPage() {
 
   if (authLoading || !user) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="text-muted">Loading...</div>
+      <div className="min-h-screen flex flex-col items-center justify-center gap-3 bg-navy">
+        <Spinner className="h-8 w-8" />
+        <p className="text-muted text-sm">Loading…</p>
       </div>
     );
   }
 
   return (
-    <div className="flex min-h-screen">
+    <div className="flex h-screen overflow-hidden">
       <Sidebar userEmail={user.email} onLogout={logout} />
-      <main className="flex-1 p-8 overflow-auto">
+      <main className="flex-1 min-h-0 p-8 overflow-auto">
         <div className="max-w-5xl mx-auto">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-8">
             <div>
@@ -93,11 +95,11 @@ export default function DashboardPage() {
                 Dashboard
               </h1>
               <p className="text-muted text-sm mt-0.5">
-                Your workflows and progress
+                Manage workflows and track progress
               </p>
             </div>
             <Link href="/dashboard/new" className="btn-primary w-fit shrink-0">
-              Create workflow
+              New workflow
             </Link>
           </div>
 
@@ -127,12 +129,16 @@ export default function DashboardPage() {
           )}
 
           {loading ? (
-            <div className="text-muted">Loading workflows...</div>
+            <div className="flex flex-col items-center gap-3 py-12">
+              <Spinner className="h-8 w-8" />
+              <p className="text-muted text-sm">Loading workflows…</p>
+            </div>
           ) : workflows.length === 0 ? (
             <div className="card p-12 text-center">
-              <p className="text-muted mb-4">No workflows yet.</p>
+              <p className="text-muted mb-1 font-medium text-white/90">No workflows yet</p>
+              <p className="text-muted text-sm mb-6">Create a workflow to break down a goal into steps and tasks.</p>
               <Link href="/dashboard/new" className="btn-primary inline-block">
-                Create your first workflow
+                Create workflow
               </Link>
             </div>
           ) : filtered.length === 0 ? (
@@ -141,7 +147,7 @@ export default function DashboardPage() {
               <button
                 type="button"
                 onClick={() => setSearch("")}
-                className="text-primary hover:underline mt-2"
+                className="text-primary hover:underline mt-2 text-sm font-medium"
               >
                 Clear search
               </button>

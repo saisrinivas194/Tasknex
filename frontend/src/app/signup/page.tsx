@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useAuth } from "@/components/AuthProvider";
 import { Logo } from "@/components/Logo";
+import { Spinner } from "@/components/Spinner";
 
 const MIN_PASSWORD_LENGTH = 8;
 
@@ -73,7 +74,7 @@ export default function SignupPage() {
         <p className="text-muted text-sm mb-6">
           Already have an account?{" "}
           <Link href="/login" className="text-primary hover:underline font-medium">
-            Log in
+            Sign in
           </Link>
         </p>
 
@@ -160,9 +161,16 @@ export default function SignupPage() {
           <button
             type="submit"
             disabled={!canSubmit}
-            className="btn-primary w-full disabled:opacity-50 disabled:cursor-not-allowed"
+            className="btn-primary w-full flex items-center justify-center gap-2 min-h-[44px] disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            {loading ? "Creating your account…" : "Create account"}
+            {loading ? (
+              <>
+                <Spinner className="h-5 w-5 border-t-white" />
+                <span>Creating account…</span>
+              </>
+            ) : (
+              "Create account"
+            )}
           </button>
         </form>
 

@@ -7,6 +7,7 @@ import { useAuth } from "@/components/AuthProvider";
 import { api, Workflow, Task, TaskStatus } from "@/lib/api";
 import { TaskBoard } from "@/components/TaskBoard";
 import { Sidebar } from "@/components/Sidebar";
+import { Spinner } from "@/components/Spinner";
 import { WorkflowEditor } from "@/components/WorkflowEditor";
 
 export default function WorkflowPage() {
@@ -70,8 +71,9 @@ export default function WorkflowPage() {
 
   if (authLoading || !user) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="text-slate-400">Loading...</div>
+      <div className="min-h-screen flex flex-col items-center justify-center gap-3 bg-navy">
+        <Spinner className="h-8 w-8" />
+        <p className="text-muted text-sm">Loading…</p>
       </div>
     );
   }
@@ -84,10 +86,11 @@ export default function WorkflowPage() {
 
   if (loading && !workflow) {
     return (
-      <div className="flex min-h-screen">
+      <div className="flex h-screen overflow-hidden">
         <Sidebar userEmail={user.email} onLogout={logout} />
-        <main className="flex-1 flex items-center justify-center p-8">
-          <div className="text-muted">Loading workflow…</div>
+        <main className="flex-1 min-h-0 flex flex-col items-center justify-center gap-3 p-8">
+          <Spinner className="h-8 w-8" />
+          <p className="text-muted text-sm">Loading workflow…</p>
         </main>
       </div>
     );
@@ -95,9 +98,9 @@ export default function WorkflowPage() {
 
   if (!workflow) {
     return (
-      <div className="flex min-h-screen">
+      <div className="flex h-screen overflow-hidden">
         <Sidebar userEmail={user?.email ?? ""} onLogout={logout} />
-        <main className="flex-1 flex flex-col items-center justify-center gap-4 p-8">
+        <main className="flex-1 min-h-0 flex flex-col items-center justify-center gap-4 p-8">
           <p className="text-muted">Workflow not found.</p>
           {error && (
             <p className="text-sm text-amber-500/90 max-w-md text-center">
@@ -176,9 +179,9 @@ export default function WorkflowPage() {
   }
 
   return (
-    <div className="flex min-h-screen">
+    <div className="flex h-screen overflow-hidden">
       <Sidebar userEmail={user.email} onLogout={logout} />
-      <main className="flex-1 p-8 overflow-auto">
+      <main className="flex-1 min-h-0 p-8 overflow-auto">
         <div className="max-w-6xl mx-auto">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
             <div className="min-w-0">

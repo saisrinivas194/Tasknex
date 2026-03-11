@@ -46,4 +46,10 @@ async def main():
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    try:
+        asyncio.run(main())
+    except Exception as e:
+        if "gaierror" in type(e).__name__ or "nodename nor servname" in str(e):
+            print("\nCould not resolve database host. For migrations from your computer,")
+            print("use Railway's *public* Postgres URL in backend/.env (Variables → DATABASE_PUBLIC_URL).")
+        raise

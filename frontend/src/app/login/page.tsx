@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useAuth } from "@/components/AuthProvider";
 import { Logo } from "@/components/Logo";
+import { Spinner } from "@/components/Spinner";
 
 export default function LoginPage() {
   const [email, setEmail] = useState("");
@@ -23,7 +24,7 @@ export default function LoginPage() {
       router.push("/dashboard");
       router.refresh();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Login failed");
+      setError(err instanceof Error ? err.message : "Sign-in failed. Please check your email and password.");
     } finally {
       setLoading(false);
     }
@@ -33,7 +34,7 @@ export default function LoginPage() {
     <div className="min-h-screen flex flex-col items-center justify-center px-4 bg-navy">
       <Logo href="/" className="mb-6" />
       <div className="card w-full max-w-md p-8">
-        <h1 className="text-2xl font-bold text-white tracking-tight mb-2">Log in</h1>
+        <h1 className="text-2xl font-bold text-white tracking-tight mb-2">Sign in</h1>
         <p className="text-muted text-sm mb-6">
           Don&apos;t have an account?{" "}
           <Link href="/signup" className="text-primary hover:underline">
@@ -67,8 +68,15 @@ export default function LoginPage() {
               required
             />
           </div>
-          <button type="submit" disabled={loading} className="btn-primary w-full">
-            {loading ? "Logging in..." : "Log in"}
+          <button type="submit" disabled={loading} className="btn-primary w-full flex items-center justify-center gap-2 min-h-[44px]">
+            {loading ? (
+              <>
+                <Spinner className="h-5 w-5 border-t-white" />
+                <span>Signing in…</span>
+              </>
+            ) : (
+              "Sign in"
+            )}
           </button>
         </form>
       </div>

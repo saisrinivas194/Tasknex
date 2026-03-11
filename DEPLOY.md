@@ -128,46 +128,116 @@ After saving Variables and Root Directory, Railway will redeploy. Wait for the b
 
 ## 3. Run database migrations (backend)
 
-After the first deploy, run migrations once so the `tasks` table has all columns:
+### What are migrations and why run them?
 
-**Option A – Railway CLI**
+When your app first starts on Railway, it creates the basic database tables. The **migrations** step adds a few extra columns to the `tasks` table (e.g. for file links, priority, due date). If you skip this, the app may work but some features can break. You only need to run migrations **once** after the first deploy.
 
-```bash
-railway link   # select your project and backend service
-cd backend
-railway run python run_migrations.py
-```
+### Easiest way: run from your computer (recommended)
 
-**Option B – Railway shell**
+You run a small script on your machine; it connects to your **Railway** database and updates the tables.
 
-In the backend service → **Settings** → run a one-off command (if available), or use **Shell** and run:
+1. **Get your Railway database URL (use the public one)**
+   - In Railway, click your **PostgreSQL** service (the database).
+   - Open the **Variables** or **Connect** tab.
+   - Copy the **public** connection URL. It is often named **`DATABASE_PUBLIC_URL`** or shown as "Public network" / "External" in the Connect tab. Use that one when running from your computer; the plain `DATABASE_URL` may be private and only work from inside Railway, which causes "nodename nor servname" when you run migrations locally.
 
-```bash
-cd backend && python run_migrations.py
-```
+2. **Point your backend at that URL (temporarily)**
+   - On your computer, open the file `backend/.env`.
+   - Set the line (or add it):
+     ```text
+     DATABASE_URL=postgres://...paste the URL you copied...
+     ```
+   - Save the file. (You can remove or change this later after migrations.)
 
-**Option C – Local with production DB**
+3. **Run the migration script**
+   - Open a terminal. Go to your **project folder** (the one that **contains** the `backend` folder). Then run **one** of these:
+   - **macOS/Linux – one line (recommended):**
+     ```bash
+     cd backend && ./venv/bin/python3.12 run_migrations.py
+     ```
+     If your project is in `Desktop/application`, run that from `Desktop/application` (so that `backend` exists there).
+   - **Or:** `cd backend`, then run `./venv/bin/python3.12 run_migrations.py` (must be **inside** the `backend` folder for the second part to work).
+   - **Windows:** `cd backend` then `venv\Scripts\python.exe run_migrations.py`.
+   - If you see **`ModuleNotFoundError: No module named 'sqlalchemy'`**, the command is not using the venv. Use the venv’s Python explicitly: `./venv/bin/python3.12 run_migrations.py` from inside the `backend` folder (macOS/Linux).
+   - If you see **`nodename nor servname provided, or not known`** or **connection refused**, set `DATABASE_URL` in `backend/.env` to Railway’s **public** Postgres URL (e.g. **`DATABASE_PUBLIC_URL`** from the Postgres service Variables). The default `DATABASE_URL` on Railway is often private and only works from Railway’s network.
 
-Temporarily set `DATABASE_URL` to your Railway Postgres URL and run:
+4. **Check the output**
+   - You should see lines like `OK: ALTER TABLE...` and finally `Migrations completed successfully.`
 
-```bash
-cd backend && source venv/bin/activate && python run_migrations.py
-```
+5. **Optional:** Remove or change `DATABASE_URL` in `backend/.env` if you don’t want your local app to use the production database.
+
+### Other ways to run migrations
+
+**Option A – Railway CLI** (if you use the Railway command-line tool)
+
+1. Install: [Railway CLI](https://docs.railway.app/develop/cli).
+2. In a terminal, from your **project root** (the folder that contains `backend` and `frontend`):
+   ```bash
+   railway link
+   ```
+   When asked, select your **project** and your **backend** service (not the database).
+3. Run the script with Railway’s environment (so it uses Railway’s `DATABASE_URL`):
+   ```bash
+   cd backend
+   railway run python run_migrations.py
+   ```
+
+**Option B – Railway dashboard (one-off command)**
+
+If your Railway plan supports running a one-off command or a **Shell** in the backend service:
+
+1. Open your **backend** service in Railway.
+2. Find **Shell**, **One-off command**, or **Run command** (often under **Settings** or the service menu).
+3. Run:
+   ```bash
+   python run_migrations.py
+   ```
+   (No `cd backend` needed—the deployed app root is already the backend folder.)
 
 ---
 
 ## 4. Deploy the frontend
 
-1. In the **same** Railway project, click **+ New** → **GitHub Repo** and select the **same** repo again (second service).
-2. Configure the **frontend** service:
-   - **Root Directory:** `frontend`  
-     (Railway will then use **Config-as-Code** from `frontend/railway.toml` for build and start commands.)
-   - If you set them manually: **Build Command** = `npm ci && npm run build`, **Start Command** = `npm start`.
-   - **Variables:**
-     - `NEXT_PUBLIC_API_URL` = `https://YOUR_BACKEND_DOMAIN/api`  
-       (e.g. `https://your-backend.up.railway.app/api` — no trailing slash, include `/api`)
+1. **Add the frontend service**  
+   In the **same** Railway project (where you have the backend and Postgres), click **+ New** → **GitHub Repo** and select the **same** repo again. You will get a **second** service (the frontend).
 
-3. **Generate domain:** Frontend service → **Settings** → **Networking** → **Generate domain**. This is your app URL.
+2. **Set Root Directory**  
+   - Click on the **frontend** service (the one you just added).  
+   - Open **Settings**.  
+   - Find **Root Directory** (under Build or Source).  
+   - In the text box, type exactly: **`frontend`** (no slash, no path—just the word `frontend`).  
+   - Save if there is a Save button.  
+   This tells Railway to build and run only the `frontend` folder, not the whole repo.
+
+3. **Add the API URL variable**  
+   - Open the **Variables** tab for the frontend service.  
+   - Click **+ New Variable** (or Add Variable).  
+   - **Name:** `NEXT_PUBLIC_API_URL`  
+   - **Value:** Get it from your **backend** service:  
+     1. In Railway, click your **backend** service (the one with Root Directory = `backend`).  
+     2. Go to **Settings** → **Networking** (or the **Deployments** tab).  
+     3. Find the **domain** Railway gave the backend (e.g. `https://tasknex-backend.up.railway.app`). Copy it.  
+     4. Add `/api` at the end (no space). Example: `https://tasknex-backend.up.railway.app/api`  
+     That full URL is what you paste as the **Value** for `NEXT_PUBLIC_API_URL`.
+
+4. **Generate a domain**  
+   - In the frontend service, go to **Settings** → **Networking** (or **Generate domain**).  
+   - Click **Generate domain**. Railway will show a URL like `https://your-frontend.up.railway.app`.
+
+5. **Open the app**  
+   Open that URL in your browser. That is your deployed app.
+
+### If the frontend loads but the backend seems disconnected
+
+- **Check 1 – Backend URL in the frontend**  
+  In Railway → **frontend** service → **Variables**. Ensure **`NEXT_PUBLIC_API_URL`** is set to your **backend** URL + **`/api`**, e.g. `https://your-backend.up.railway.app/api` (no trailing slash). If it is missing or wrong, fix it and **redeploy the frontend** (variables are baked in at build time).
+
+- **Check 2 – Backend is up**  
+  In the browser, open: `https://YOUR_BACKEND_DOMAIN/api/health`  
+  You should see `{"status":"ok"}`. If you get an error or timeout, the backend service may be down or the URL is wrong.
+
+- **Check 3 – Browser Network tab**  
+  On your frontend page, open DevTools (F12) → **Network**. Try logging in or loading the dashboard. Look for requests to your backend domain; if they are red or show CORS/blocked, the frontend is not talking to the right backend or CORS is blocking. Fix `NEXT_PUBLIC_API_URL` and redeploy the frontend.
 
 ---
 

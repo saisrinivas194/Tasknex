@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useAuth } from "@/components/AuthProvider";
+import { Spinner } from "@/components/Spinner";
 import { api, BACKEND_HEALTH_URL } from "@/lib/api";
 import { Sidebar } from "@/components/Sidebar";
 
@@ -53,16 +54,17 @@ export default function NewWorkflowPage() {
 
   if (authLoading || !user) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="text-muted">Loading...</div>
+      <div className="min-h-screen flex flex-col items-center justify-center gap-3 bg-navy">
+        <Spinner className="h-8 w-8" />
+        <p className="text-muted text-sm">Loading…</p>
       </div>
     );
   }
 
   return (
-    <div className="flex min-h-screen">
+    <div className="flex h-screen overflow-hidden">
       <Sidebar userEmail={user.email} onLogout={logout} />
-      <main className="flex-1 p-8 overflow-auto">
+      <main className="flex-1 min-h-0 p-8 overflow-auto">
         <div className="max-w-2xl mx-auto">
           <h1 className="text-2xl font-bold text-white tracking-tight">
             AI Generator
