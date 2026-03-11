@@ -1,0 +1,83 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Tasknex theme - dark productivity */
+:root,
+[data-theme="dark"] {
+  --background: #0F172A;
+  --foreground: #F1F5F9;
+  --card: #1E293B;
+  --card-hover: #334155;
+  --accent: #6366F1;
+  --accent-success: #22C55E;
+  --muted: #94A3B8;
+}
+
+[data-theme="light"] {
+  --background: #F8FAFC;
+  --foreground: #0F172A;
+  --card: #FFFFFF;
+  --card-hover: #F1F5F9;
+  --accent: #4F46E5;
+  --accent-success: #16A34A;
+  --muted: #64748B;
+}
+
+body {
+  color: var(--foreground);
+  background: var(--background);
+  min-height: 100vh;
+}
+
+/* Cards: rounded, soft shadow */
+[data-theme="dark"] .card {
+  background-color: var(--card);
+  border: 1px solid #334155;
+  box-shadow: 0 1px 3px 0 rgb(0 0 0 / 0.15);
+}
+[data-theme="light"] .card {
+  background-color: var(--card);
+  border: 1px solid #E2E8F0;
+  box-shadow: 0 1px 3px 0 rgb(0 0 0 / 0.08);
+}
+[data-theme="light"] .btn-secondary {
+  @apply bg-slate-200 text-slate-800 hover:bg-slate-300;
+}
+[data-theme="light"] .input-field {
+  @apply bg-white border-slate-300 text-slate-900 placeholder-slate-500;
+}
+[data-theme="light"] .text-slate-400 { color: #64748B; }
+[data-theme="light"] .text-slate-500 { color: #64748B; }
+[data-theme="light"] .text-white { color: #0F172A; }
+[data-theme="light"] .border-slate-700 { border-color: #E2E8F0; }
+[data-theme="light"] .bg-slate-700\/50:hover,
+[data-theme="light"] .hover\:bg-slate-700\/50:hover { background-color: #F1F5F9; }
+[data-theme="light"] .bg-slate-800\/80 { background-color: #FFFFFF; }
+[data-theme="light"] .bg-slate-600 { background-color: #CBD5E1; }
+[data-theme="light"] .bg-slate-700 { background-color: #94A3B8; }
+
+@layer components {
+  .btn-primary {
+    @apply px-4 py-2 rounded-lg font-medium text-white transition shadow-sm;
+    background-color: var(--accent);
+  }
+  .btn-primary:hover {
+    filter: brightness(1.1);
+  }
+  .btn-secondary {
+    @apply px-4 py-2 rounded-lg font-medium bg-slate-600 text-slate-100 hover:bg-slate-500 transition;
+  }
+  .input-field {
+    @apply w-full px-4 py-2.5 rounded-lg border focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent;
+    background-color: #1E293B;
+    border-color: #475569;
+    color: #F1F5F9;
+  }
+  .input-field::placeholder {
+    color: #94A3B8;
+  }
+  .card {
+    @apply rounded-xl shadow-card;
+  }
+}
