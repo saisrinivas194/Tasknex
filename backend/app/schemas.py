@@ -18,10 +18,17 @@ class UserCreate(BaseModel):
 class UserResponse(BaseModel):
     id: int
     email: str
+    display_name: str | None = None
+    bio: str | None = None
     created_at: datetime
 
     class Config:
         from_attributes = True
+
+
+class ProfileUpdate(BaseModel):
+    display_name: str | None = None
+    bio: str | None = None
 
 
 class Token(BaseModel):
@@ -132,6 +139,7 @@ class WorkflowResponse(BaseModel):
     goal: str
     created_at: datetime
     steps: list[StepResponse] = []
+    role: str | None = None  # "owner" | "editor" | "viewer" for current user
 
     class Config:
         from_attributes = True
@@ -144,6 +152,7 @@ class WorkflowListItem(BaseModel):
     created_at: datetime
     total_tasks: int = 0
     completed_tasks: int = 0
+    role: str | None = None  # "owner" | "editor" | "viewer" for display (owner = mine, editor/viewer = shared)
 
     class Config:
         from_attributes = True
@@ -156,3 +165,53 @@ class GenerateWorkflowRequest(BaseModel):
 class AIAssistantRequest(BaseModel):
     workflow_id: int
     prompt: str
+
+
+# Teams & collaboration
+class TeamCreate(BaseModel):
+    name: str
+
+
+class TeamResponse(BaseModel):
+    id: int
+    name: str
+    owner_id: int
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class TeamMemberResponse(BaseModel):
+    id: int
+    user_id: int
+    email: str | None = None
+    display_name: str | None = None
+
+    class Config:
+        from_attributes = True
+
+
+class TeamWithMembersResponse(TeamResponse):
+    members: list[TeamMemberResponse] = []
+
+
+class AddTeamMemberRequest(BaseModel):
+    email: EmailStr
+
+
+class WorkflowShareRequest(BaseModel):
+    share_with_user_email: str | None = None
+    share_with_team_id: int | None = None
+    role: str = "viewer"  # viewer | editor
+
+
+class WorkflowShareResponse(BaseModel):
+    id: int
+    workflow_id: int
+    user_id: int | None = None
+    team_id: int | None = None
+    role: str
+
+    class Config:
+        from_attributes = True

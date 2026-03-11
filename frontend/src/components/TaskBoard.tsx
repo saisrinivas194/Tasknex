@@ -23,9 +23,10 @@ type TaskBoardProps = {
     labels?: string[];
   }) => void;
   onRefresh: () => void;
+  canEdit?: boolean;
 };
 
-export function TaskBoard({ workflow, onTaskUpdate, onRefresh }: TaskBoardProps) {
+export function TaskBoard({ workflow, onTaskUpdate, onRefresh, canEdit = true }: TaskBoardProps) {
   const [draggedTask, setDraggedTask] = useState<Task | null>(null);
 
   const allTasks = workflow.steps.flatMap((s) => s.tasks);
@@ -34,7 +35,7 @@ export function TaskBoard({ workflow, onTaskUpdate, onRefresh }: TaskBoardProps)
   const handleDragEnd = () => setDraggedTask(null);
 
   const handleDrop = (status: TaskStatus) => {
-    if (!draggedTask || draggedTask.status === status) return;
+    if (!canEdit || !draggedTask || draggedTask.status === status) return;
     onTaskUpdate(draggedTask.id, { status });
     setDraggedTask(null);
   };
@@ -47,9 +48,9 @@ export function TaskBoard({ workflow, onTaskUpdate, onRefresh }: TaskBoardProps)
           return (
             <div
               key={col.status}
-              className="rounded bg-[#1E3A5F] border border-[#253858] p-3 min-h-[280px] flex flex-col"
-              onDragOver={(e) => e.preventDefault()}
-              onDrop={() => handleDrop(col.status)}
+              className={`rounded bg-[#1E3A5F] border border-[#253858] p-3 min-h-[280px] flex flex-col ${canEdit ? "" : ""}`}
+              onDragOver={canEdit ? (e) => e.preventDefault() : undefined}
+              onDrop={canEdit ? () => handleDrop(col.status) : undefined}
             >
               <h2 className="text-[11px] font-semibold uppercase tracking-wider text-muted mb-2 flex items-center justify-between">
                 <span className="flex items-center gap-1.5">
@@ -74,6 +75,7 @@ export function TaskBoard({ workflow, onTaskUpdate, onRefresh }: TaskBoardProps)
                     key={task.id}
                     task={task}
                     workflowId={workflow.id}
+                    canEdit={canEdit}
                     onDragStart={() => handleDragStart(task)}
                     onDragEnd={handleDragEnd}
                     onUpdate={(updates) => onTaskUpdate(task.id, updates)}

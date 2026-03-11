@@ -9,7 +9,13 @@ function getToken(): string | null {
   return localStorage.getItem("token");
 }
 
-export type User = { id: number; email: string; created_at: string };
+export type User = {
+  id: number;
+  email: string;
+  display_name?: string | null;
+  bio?: string | null;
+  created_at: string;
+};
 export type TaskStatus = "planned" | "in_progress" | "completed";
 export type TaskPriority = "low" | "medium" | "high" | "critical";
 export type Task = {
@@ -38,6 +44,7 @@ export type Workflow = {
   goal: string;
   created_at: string;
   steps: Step[];
+  role?: string | null; // "owner" | "editor" | "viewer"
 };
 export type WorkflowListItem = {
   id: number;
@@ -46,6 +53,31 @@ export type WorkflowListItem = {
   created_at: string;
   total_tasks: number;
   completed_tasks: number;
+  role?: string | null; // "owner" | "editor" | "viewer"
+};
+
+export type Team = {
+  id: number;
+  name: string;
+  owner_id: number;
+  created_at: string;
+};
+
+export type TeamMemberResponse = {
+  id: number;
+  user_id: number;
+  email?: string | null;
+  display_name?: string | null;
+};
+
+export type TeamWithMembers = Team & { members: TeamMemberResponse[] };
+
+export type WorkflowShare = {
+  id: number;
+  workflow_id: number;
+  user_id: number | null;
+  team_id: number | null;
+  role: string;
 };
 
 async function request<T>(
@@ -101,6 +133,11 @@ export const api = {
         token: null,
       }),
     me: () => request<User>("/auth/me"),
+    updateProfile: (data: { display_name?: string | null; bio?: string | null }) =>
+      request<User>("/auth/me", {
+        method: "PATCH",
+        body: JSON.stringify(data),
+      }),
   },
   workflows: {
     list: () => request<WorkflowListItem[]>("/workflows"),
@@ -119,6 +156,24 @@ export const api = {
       request<void>(`/workflows/${id}`, { method: "DELETE" }),
     duplicate: (id: number) =>
       request<Workflow>(`/workflows/${id}/duplicate`, { method: "POST" }),
+    listShares: (workflowId: number) =>
+      request<WorkflowShare[]>(`/workflows/${workflowId}/shares`),
+    share: (
+      workflowId: number,
+      data: {
+        share_with_user_email?: string;
+        share_with_team_id?: number;
+        role: string;
+      }
+    ) =>
+      request<WorkflowShare>(`/workflows/${workflowId}/shares`, {
+        method: "POST",
+        body: JSON.stringify(data),
+      }),
+    unshare: (workflowId: number, shareId: number) =>
+      request<void>(`/workflows/${workflowId}/shares/${shareId}`, {
+        method: "DELETE",
+      }),
     updateStepOrder: (workflowId: number, stepId: number, step_order: number) =>
       request<Step>(`/workflows/${workflowId}/steps/${stepId}`, {
         method: "PATCH",
@@ -179,5 +234,25 @@ export const api = {
         method: "POST",
         body: JSON.stringify({ workflow_id: workflowId, prompt }),
       }),
+  },
+  teams: {
+    list: () => request<Team[]>("/teams"),
+    create: (name: string) =>
+      request<Team>("/teams", {
+        method: "POST",
+        body: JSON.stringify({ name }),
+      }),
+    get: (id: number) => request<TeamWithMembers>(`/teams/${id}`),
+    addMember: (teamId: number, email: string) =>
+      request<TeamMemberResponse>(`/teams/${teamId}/members`, {
+        method: "POST",
+        body: JSON.stringify({ email }),
+      }),
+    removeMember: (teamId: number, userId: number) =>
+      request<void>(`/teams/${teamId}/members/${userId}`, {
+        method: "DELETE",
+      }),
+    delete: (id: number) =>
+      request<void>(`/teams/${id}`, { method: "DELETE" }),
   },
 };

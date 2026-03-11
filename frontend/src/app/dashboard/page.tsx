@@ -86,7 +86,7 @@ export default function DashboardPage() {
 
   return (
     <div className="flex h-screen overflow-hidden">
-      <Sidebar userEmail={user.email} onLogout={logout} />
+      <Sidebar user={user} onLogout={logout} />
       <main className="flex-1 min-h-0 p-8 overflow-auto">
         <div className="max-w-5xl mx-auto">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
@@ -169,9 +169,16 @@ export default function DashboardPage() {
                         <span className="text-[11px] font-medium text-muted uppercase tracking-wide">
                           WF-{w.id}
                         </span>
-                        <span className="badge bg-primary/20 text-primary-200 text-[10px]">
-                          {w.completed_tasks}/{w.total_tasks}
-                        </span>
+                        <div className="flex items-center gap-1.5">
+                          {(w.role === "viewer" || w.role === "editor") && (
+                            <span className="badge bg-amber-500/20 text-amber-400 text-[10px]">
+                              Shared
+                            </span>
+                          )}
+                          <span className="badge bg-primary/20 text-primary-200 text-[10px]">
+                            {w.completed_tasks}/{w.total_tasks}
+                          </span>
+                        </div>
                       </div>
                       <h2 className="font-semibold text-white text-sm mt-1 truncate pr-14">
                         {w.title}
@@ -202,15 +209,17 @@ export default function DashboardPage() {
                       >
                         {duplicatingId === w.id ? "…" : "Copy"}
                       </button>
-                      <button
-                        type="button"
-                        onClick={(e) => handleDelete(e, w.id)}
-                        disabled={deletingId === w.id}
-                        className="p-1.5 rounded bg-[#253858] hover:bg-red-500/20 text-red-400 text-xs disabled:opacity-50"
-                        title="Delete"
-                      >
-                        {deletingId === w.id ? "…" : "Delete"}
-                      </button>
+                      {w.role === "owner" || !w.role ? (
+                        <button
+                          type="button"
+                          onClick={(e) => handleDelete(e, w.id)}
+                          disabled={deletingId === w.id}
+                          className="p-1.5 rounded bg-[#253858] hover:bg-red-500/20 text-red-400 text-xs disabled:opacity-50"
+                          title="Delete"
+                        >
+                          {deletingId === w.id ? "…" : "Delete"}
+                        </button>
+                      ) : null}
                     </div>
                   </div>
                 );

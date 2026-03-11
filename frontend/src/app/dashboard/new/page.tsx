@@ -63,7 +63,7 @@ export default function NewWorkflowPage() {
 
   return (
     <div className="flex h-screen overflow-hidden">
-      <Sidebar userEmail={user.email} onLogout={logout} />
+      <Sidebar user={user} onLogout={logout} />
       <main className="flex-1 min-h-0 p-8 overflow-auto">
         <div className="max-w-2xl mx-auto">
           <h1 className="text-2xl font-bold text-white tracking-tight">

@@ -31,6 +31,7 @@ function formatDueDate(iso: string | null | undefined): string {
 type TaskCardProps = {
   task: Task;
   workflowId: number;
+  canEdit?: boolean;
   onDragStart: () => void;
   onDragEnd: () => void;
   onUpdate: (updates: {
@@ -45,7 +46,7 @@ type TaskCardProps = {
   onDelete: () => void;
 };
 
-export function TaskCard({ task, workflowId, onDragStart, onDragEnd, onUpdate, onDelete }: TaskCardProps) {
+export function TaskCard({ task, workflowId, canEdit = true, onDragStart, onDragEnd, onUpdate, onDelete }: TaskCardProps) {
   const [editing, setEditing] = useState(false);
   const [title, setTitle] = useState(task.title);
   const [description, setDescription] = useState(task.description);
@@ -72,10 +73,10 @@ export function TaskCard({ task, workflowId, onDragStart, onDragEnd, onUpdate, o
   const taskPriority = (task.priority as TaskPriority) ?? "medium";
   return (
     <div
-      draggable
-      onDragStart={onDragStart}
-      onDragEnd={onDragEnd}
-      className={`card card-issue rounded bg-[#253858] p-2.5 border border-[#344563] cursor-grab active:cursor-grabbing hover:border-[#4C9AFF]/50 transition ${PRIORITY_BORDER[taskPriority]}`}
+      draggable={canEdit}
+      onDragStart={canEdit ? onDragStart : undefined}
+      onDragEnd={canEdit ? onDragEnd : undefined}
+      className={`card card-issue rounded bg-[#253858] p-2.5 border border-[#344563] transition ${PRIORITY_BORDER[taskPriority]} ${canEdit ? "cursor-grab active:cursor-grabbing hover:border-[#4C9AFF]/50" : ""}`}
     >
       {editing ? (
         <div className="space-y-2" onClick={(e) => e.stopPropagation()}>
@@ -199,41 +200,43 @@ export function TaskCard({ task, workflowId, onDragStart, onDragEnd, onUpdate, o
               <span aria-hidden>🔗</span> Document link
             </a>
           )}
-          <div className="flex items-center gap-2 mt-2 flex-wrap">
-            <select
-              value={task.status}
-              onChange={(e) => {
-                e.stopPropagation();
-                onUpdate({ status: e.target.value as TaskStatus });
-              }}
-              onClick={(e) => e.stopPropagation()}
-              className="bg-[#1E3A5F] border border-[#344563] rounded text-xs text-slate-200 px-2 py-0.5"
-            >
-              <option value="planned">Planned</option>
-              <option value="in_progress">In progress</option>
-              <option value="completed">Completed</option>
-            </select>
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                setEditing(true);
-              }}
-              className="text-slate-400 hover:text-white text-xs"
-            >
-              Edit
-            </button>
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                if (confirm("Delete this task?")) onDelete();
-              }}
-              className="text-red-400 hover:text-red-300 text-xs"
-            >
-              Delete
-            </button>
-          </div>
+          {canEdit && (
+            <div className="flex items-center gap-2 mt-2 flex-wrap">
+              <select
+                value={task.status}
+                onChange={(e) => {
+                  e.stopPropagation();
+                  onUpdate({ status: e.target.value as TaskStatus });
+                }}
+                onClick={(e) => e.stopPropagation()}
+                className="bg-[#1E3A5F] border border-[#344563] rounded text-xs text-slate-200 px-2 py-0.5"
+              >
+                <option value="planned">Planned</option>
+                <option value="in_progress">In progress</option>
+                <option value="completed">Completed</option>
+              </select>
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setEditing(true);
+                }}
+                className="text-slate-400 hover:text-white text-xs"
+              >
+                Edit
+              </button>
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  if (confirm("Delete this task?")) onDelete();
+                }}
+                className="text-red-400 hover:text-red-300 text-xs"
+              >
+                Delete
+              </button>
+            </div>
+          )}
         </>
       )}
     </div>

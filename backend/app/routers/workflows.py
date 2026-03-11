@@ -1,10 +1,10 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func, delete
+from sqlalchemy import select, func, delete, or_
 from sqlalchemy.orm import selectinload
 
 from app.database import get_db
-from app.models import User, Workflow, Step, Task, TaskStatus, TaskPriority
+from app.models import User, Workflow, Step, Task, TaskStatus, TaskPriority, WorkflowShare, TeamMember, Team
 from app.schemas import (
     WorkflowCreate,
     WorkflowResponse,
@@ -17,9 +17,12 @@ from app.schemas import (
     TaskUpdate,
     GenerateWorkflowRequest,
     AIAssistantRequest,
+    WorkflowShareRequest,
+    WorkflowShareResponse,
 )
 from app.auth import get_current_user
 from app.services.ai_workflow import generate_workflow_from_goal, ai_assistant_add_tasks
+from app.workflow_access import get_workflow_and_access
 
 router = APIRouter(prefix="/workflows", tags=["workflows"])
 
@@ -73,16 +76,49 @@ async def list_workflows(
     skip: int = Query(0, ge=0),
     limit: int = Query(50, ge=1, le=100),
 ):
-    result = await db.execute(
+    # Owned workflows
+    owned = await db.execute(
         select(Workflow)
         .where(Workflow.user_id == current_user.id)
         .order_by(Workflow.created_at.desc())
-        .offset(skip)
-        .limit(limit)
     )
-    workflows = result.scalars().all()
+    owned_list = list(owned.scalars().all())
+    # Shared with me (direct user or via team)
+    team_ids = await db.execute(select(TeamMember.team_id).where(TeamMember.user_id == current_user.id))
+    team_id_list = [r[0] for r in team_ids.all()]
+    shared_ids = set()
+    if team_id_list:
+        shared_result = await db.execute(
+            select(WorkflowShare.workflow_id, WorkflowShare.role).where(
+                WorkflowShare.team_id.in_(team_id_list)
+            )
+        )
+        for row in shared_result.all():
+            shared_ids.add((row[0], row[1]))
+    user_shared = await db.execute(
+        select(WorkflowShare.workflow_id, WorkflowShare.role).where(WorkflowShare.user_id == current_user.id)
+    )
+    for row in user_shared.all():
+        shared_ids.add((row[0], row[1]))
+    owned_ids = {w.id for w in owned_list}
+    shared_only = [(wid, role) for (wid, role) in shared_ids if wid not in owned_ids]
+    role_map = {w.id: "owner" for w in owned_list}
+    if not shared_only:
+        workflows_to_list = owned_list
+    else:
+        shared_wids = [w[0] for w in shared_only]
+        shared_workflows = await db.execute(
+            select(Workflow).where(Workflow.id.in_(shared_wids)).order_by(Workflow.created_at.desc())
+        )
+        shared_list = list(shared_workflows.scalars().all())
+        role_map = {w.id: "owner" for w in owned_list}
+        for wid, role in shared_only:
+            role_map[wid] = role
+        workflows_to_list = owned_list + shared_list
+        workflows_to_list.sort(key=lambda w: w.created_at, reverse=True)
+    workflows_to_list = workflows_to_list[skip : skip + limit]
     out = []
-    for w in workflows:
+    for w in workflows_to_list:
         tasks_result = await db.execute(
             select(func.count(Task.id), func.count(Task.id).filter(Task.status == TaskStatus.completed))
             .join(Step)
@@ -97,6 +133,7 @@ async def list_workflows(
                 created_at=w.created_at,
                 total_tasks=total or 0,
                 completed_tasks=completed or 0,
+                role=role_map.get(w.id, "owner"),
             )
         )
     return out
@@ -108,15 +145,16 @@ async def get_workflow(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
+    workflow, role = await get_workflow_and_access(db, current_user.id, workflow_id)
+    if not workflow or not role:
+        raise HTTPException(status_code=404, detail="Workflow not found")
     result = await db.execute(
         select(Workflow)
-        .where(Workflow.id == workflow_id, Workflow.user_id == current_user.id)
+        .where(Workflow.id == workflow_id)
         .options(selectinload(Workflow.steps).selectinload(Step.tasks))
     )
-    workflow = result.scalar_one_or_none()
-    if not workflow:
-        raise HTTPException(status_code=404, detail="Workflow not found")
-    return WorkflowResponse.model_validate(workflow)
+    workflow = result.scalar_one()
+    return WorkflowResponse.model_validate(workflow).model_copy(update={"role": role})
 
 
 @router.patch("/{workflow_id}", response_model=WorkflowResponse)
@@ -126,12 +164,9 @@ async def update_workflow(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    result = await db.execute(
-        select(Workflow).where(Workflow.id == workflow_id, Workflow.user_id == current_user.id)
-    )
-    workflow = result.scalar_one_or_none()
-    if not workflow:
-        raise HTTPException(status_code=404, detail="Workflow not found")
+    workflow, role = await get_workflow_and_access(db, current_user.id, workflow_id)
+    if not workflow or role not in ("owner", "editor"):
+        raise HTTPException(status_code=404 if not workflow else 403, detail="Workflow not found" if not workflow else "Cannot edit this workflow")
     workflow.title = body.title
     workflow.goal = body.goal
     await db.commit()
@@ -150,13 +185,99 @@ async def delete_workflow(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    result = await db.execute(
-        select(Workflow).where(Workflow.id == workflow_id, Workflow.user_id == current_user.id)
-    )
-    workflow = result.scalar_one_or_none()
-    if not workflow:
-        raise HTTPException(status_code=404, detail="Workflow not found")
+    workflow, role = await get_workflow_and_access(db, current_user.id, workflow_id)
+    if not workflow or role != "owner":
+        raise HTTPException(status_code=404 if not workflow else 403, detail="Workflow not found" if not workflow else "Only the owner can delete the workflow")
     await db.delete(workflow)
+    await db.commit()
+
+
+# Sharing (owner only)
+@router.get("/{workflow_id}/shares", response_model=list[WorkflowShareResponse])
+async def list_workflow_shares(
+    workflow_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    workflow, role = await get_workflow_and_access(db, current_user.id, workflow_id)
+    if not workflow or role != "owner":
+        raise HTTPException(status_code=404 if not workflow else 403, detail="Workflow not found" if not workflow else "Only the owner can manage sharing")
+    result = await db.execute(select(WorkflowShare).where(WorkflowShare.workflow_id == workflow_id))
+    return [WorkflowShareResponse.model_validate(s) for s in result.scalars().all()]
+
+
+@router.post("/{workflow_id}/shares", response_model=WorkflowShareResponse)
+async def share_workflow(
+    workflow_id: int,
+    body: WorkflowShareRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    workflow, role = await get_workflow_and_access(db, current_user.id, workflow_id)
+    if not workflow or role != "owner":
+        raise HTTPException(status_code=404 if not workflow else 403, detail="Workflow not found" if not workflow else "Only the owner can share")
+    role_val = "editor" if body.role == "editor" else "viewer"
+    if body.share_with_user_email:
+        user_result = await db.execute(select(User).where(User.email == body.share_with_user_email))
+        user = user_result.scalar_one_or_none()
+        if not user:
+            raise HTTPException(status_code=404, detail="No user found with that email")
+        if user.id == current_user.id:
+            raise HTTPException(status_code=400, detail="You cannot share with yourself")
+        existing = await db.execute(
+            select(WorkflowShare).where(
+                WorkflowShare.workflow_id == workflow_id,
+                WorkflowShare.user_id == user.id,
+            )
+        )
+        if existing.scalar_one_or_none():
+            raise HTTPException(status_code=400, detail="Already shared with this user")
+        share = WorkflowShare(workflow_id=workflow_id, user_id=user.id, team_id=None, role=role_val)
+    elif body.share_with_team_id:
+        team_result = await db.execute(select(Team).where(Team.id == body.share_with_team_id))
+        team = team_result.scalar_one_or_none()
+        if not team:
+            raise HTTPException(status_code=404, detail="Team not found")
+        if team.owner_id != current_user.id:
+            member_check = await db.execute(
+                select(TeamMember).where(TeamMember.team_id == team.id, TeamMember.user_id == current_user.id)
+            )
+            if not member_check.scalar_one_or_none():
+                raise HTTPException(status_code=403, detail="You can only share with teams you own or belong to")
+        existing = await db.execute(
+            select(WorkflowShare).where(
+                WorkflowShare.workflow_id == workflow_id,
+                WorkflowShare.team_id == team.id,
+            )
+        )
+        if existing.scalar_one_or_none():
+            raise HTTPException(status_code=400, detail="Already shared with this team")
+        share = WorkflowShare(workflow_id=workflow_id, user_id=None, team_id=team.id, role=role_val)
+    else:
+        raise HTTPException(status_code=400, detail="Provide share_with_user_email or share_with_team_id")
+    db.add(share)
+    await db.commit()
+    await db.refresh(share)
+    return WorkflowShareResponse.model_validate(share)
+
+
+@router.delete("/{workflow_id}/shares/{share_id}", status_code=204)
+async def unshare_workflow(
+    workflow_id: int,
+    share_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    workflow, role = await get_workflow_and_access(db, current_user.id, workflow_id)
+    if not workflow or role != "owner":
+        raise HTTPException(status_code=404 if not workflow else 403, detail="Workflow not found" if not workflow else "Only the owner can manage sharing")
+    result = await db.execute(
+        select(WorkflowShare).where(WorkflowShare.id == share_id, WorkflowShare.workflow_id == workflow_id)
+    )
+    share = result.scalar_one_or_none()
+    if not share:
+        raise HTTPException(status_code=404, detail="Share not found")
+    await db.delete(share)
     await db.commit()
 
 
@@ -166,14 +287,15 @@ async def duplicate_workflow(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
+    workflow, role = await get_workflow_and_access(db, current_user.id, workflow_id)
+    if not workflow or not role:
+        raise HTTPException(status_code=404, detail="Workflow not found")
     result = await db.execute(
         select(Workflow)
-        .where(Workflow.id == workflow_id, Workflow.user_id == current_user.id)
+        .where(Workflow.id == workflow_id)
         .options(selectinload(Workflow.steps).selectinload(Step.tasks))
     )
-    workflow = result.scalar_one_or_none()
-    if not workflow:
-        raise HTTPException(status_code=404, detail="Workflow not found")
+    workflow = result.scalar_one()
     new_workflow = Workflow(
         user_id=current_user.id,
         title=workflow.title + " (copy)",
@@ -217,11 +339,9 @@ async def add_step(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    result = await db.execute(
-        select(Workflow).where(Workflow.id == workflow_id, Workflow.user_id == current_user.id)
-    )
-    if not result.scalar_one_or_none():
-        raise HTTPException(status_code=404, detail="Workflow not found")
+    _, role = await get_workflow_and_access(db, current_user.id, workflow_id)
+    if not role or role not in ("owner", "editor"):
+        raise HTTPException(status_code=404 if not role else 403, detail="Workflow not found" if not role else "Cannot edit this workflow")
     step = Step(workflow_id=workflow_id, title=body.title, step_order=body.step_order)
     db.add(step)
     await db.commit()
@@ -237,11 +357,9 @@ async def update_step_order(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    result = await db.execute(
-        select(Workflow).where(Workflow.id == workflow_id, Workflow.user_id == current_user.id)
-    )
-    if not result.scalar_one_or_none():
-        raise HTTPException(status_code=404, detail="Workflow not found")
+    _, role = await get_workflow_and_access(db, current_user.id, workflow_id)
+    if not role or role not in ("owner", "editor"):
+        raise HTTPException(status_code=404 if not role else 403, detail="Workflow not found" if not role else "Cannot edit this workflow")
     step_result = await db.execute(
         select(Step).where(Step.id == step_id, Step.workflow_id == workflow_id)
     )
@@ -262,11 +380,9 @@ async def add_task(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    result = await db.execute(
-        select(Workflow).where(Workflow.id == workflow_id, Workflow.user_id == current_user.id)
-    )
-    if not result.scalar_one_or_none():
-        raise HTTPException(status_code=404, detail="Workflow not found")
+    _, role = await get_workflow_and_access(db, current_user.id, workflow_id)
+    if not role or role not in ("owner", "editor"):
+        raise HTTPException(status_code=404 if not role else 403, detail="Workflow not found" if not role else "Cannot edit this workflow")
     step_result = await db.execute(select(Step).where(Step.id == body.step_id, Step.workflow_id == workflow_id))
     if not step_result.scalar_one_or_none():
         raise HTTPException(status_code=404, detail="Step not found")
@@ -295,11 +411,9 @@ async def update_task(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    result = await db.execute(
-        select(Workflow).where(Workflow.id == workflow_id, Workflow.user_id == current_user.id)
-    )
-    if not result.scalar_one_or_none():
-        raise HTTPException(status_code=404, detail="Workflow not found")
+    _, role = await get_workflow_and_access(db, current_user.id, workflow_id)
+    if not role or role not in ("owner", "editor"):
+        raise HTTPException(status_code=404 if not role else 403, detail="Workflow not found" if not role else "Cannot edit this workflow")
     task_result = await db.execute(
         select(Task).join(Step).where(Task.id == task_id, Step.workflow_id == workflow_id)
     )
@@ -332,11 +446,9 @@ async def delete_task(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    result = await db.execute(
-        select(Workflow).where(Workflow.id == workflow_id, Workflow.user_id == current_user.id)
-    )
-    if not result.scalar_one_or_none():
-        raise HTTPException(status_code=404, detail="Workflow not found")
+    _, role = await get_workflow_and_access(db, current_user.id, workflow_id)
+    if not role or role not in ("owner", "editor"):
+        raise HTTPException(status_code=404 if not role else 403, detail="Workflow not found" if not role else "Cannot edit this workflow")
     task_result = await db.execute(
         select(Task).join(Step).where(Task.id == task_id, Step.workflow_id == workflow_id)
     )
@@ -354,14 +466,15 @@ async def ai_assistant(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
+    workflow, role = await get_workflow_and_access(db, current_user.id, body.workflow_id)
+    if not workflow or role not in ("owner", "editor"):
+        raise HTTPException(status_code=404 if not workflow else 403, detail="Workflow not found" if not workflow else "Cannot edit this workflow")
     result = await db.execute(
         select(Workflow)
-        .where(Workflow.id == body.workflow_id, Workflow.user_id == current_user.id)
+        .where(Workflow.id == body.workflow_id)
         .options(selectinload(Workflow.steps).selectinload(Step.tasks))
     )
-    workflow = result.scalar_one_or_none()
-    if not workflow:
-        raise HTTPException(status_code=404, detail="Workflow not found")
+    workflow = result.scalar_one()
     summary = ", ".join(f"{s.title}: {len(s.tasks)} tasks" for s in workflow.steps)
     data = await ai_assistant_add_tasks(workflow.goal, summary, body.prompt)
     max_order = max((s.step_order for s in workflow.steps), default=0)

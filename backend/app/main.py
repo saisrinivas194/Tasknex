@@ -5,7 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import settings
 from app.database import init_db
-from app.routers import auth, workflows
+from app.routers import auth, workflows, teams
 
 
 @asynccontextmanager
@@ -50,3 +50,4 @@ def health():
 
 app.include_router(auth.router, prefix="/api")
 app.include_router(workflows.router, prefix="/api")
+app.include_router(teams.router, prefix="/api")

@@ -25,9 +25,59 @@ class User(Base):
     id = Column(Integer, primary_key=True, index=True)
     email = Column(String(255), unique=True, index=True, nullable=False)
     password_hash = Column(String(255), nullable=False)
+    display_name = Column(String(255), nullable=True)
+    bio = Column(Text, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
 
     workflows = relationship("Workflow", back_populates="user", cascade="all, delete-orphan")
+    owned_teams = relationship("Team", back_populates="owner", foreign_keys="Team.owner_id")
+    team_memberships = relationship("TeamMember", back_populates="user", cascade="all, delete-orphan")
+    workflow_shares = relationship("WorkflowShare", back_populates="user", foreign_keys="WorkflowShare.user_id")
+
+
+class Team(Base):
+    __tablename__ = "teams"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String(255), nullable=False)
+    owner_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    owner = relationship("User", back_populates="owned_teams", foreign_keys=[owner_id])
+    members = relationship("TeamMember", back_populates="team", cascade="all, delete-orphan")
+    workflow_shares = relationship("WorkflowShare", back_populates="team")
+
+
+class TeamMember(Base):
+    __tablename__ = "team_members"
+
+    id = Column(Integer, primary_key=True, index=True)
+    team_id = Column(Integer, ForeignKey("teams.id", ondelete="CASCADE"), nullable=False)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    team = relationship("Team", back_populates="members")
+    user = relationship("User", back_populates="team_memberships")
+
+
+class WorkflowShareRole(str, enum.Enum):
+    viewer = "viewer"
+    editor = "editor"
+
+
+class WorkflowShare(Base):
+    __tablename__ = "workflow_shares"
+
+    id = Column(Integer, primary_key=True, index=True)
+    workflow_id = Column(Integer, ForeignKey("workflows.id", ondelete="CASCADE"), nullable=False)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=True)
+    team_id = Column(Integer, ForeignKey("teams.id", ondelete="CASCADE"), nullable=True)
+    role = Column(String(20), default=WorkflowShareRole.viewer.value, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    workflow = relationship("Workflow", back_populates="shares")
+    user = relationship("User", back_populates="workflow_shares")
+    team = relationship("Team", back_populates="workflow_shares")
 
 
 class Workflow(Base):
@@ -41,6 +91,7 @@ class Workflow(Base):
 
     user = relationship("User", back_populates="workflows")
     steps = relationship("Step", back_populates="workflow", order_by="Step.step_order", cascade="all, delete-orphan")
+    shares = relationship("WorkflowShare", back_populates="workflow", cascade="all, delete-orphan")
 
 
 class Step(Base):

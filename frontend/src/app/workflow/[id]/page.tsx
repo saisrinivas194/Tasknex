@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter, useParams } from "next/navigation";
 import Link from "next/link";
 import { useAuth } from "@/components/AuthProvider";
-import { api, Workflow, Task, TaskStatus } from "@/lib/api";
+import { api, Workflow, Task, TaskStatus, WorkflowShare, Team } from "@/lib/api";
 import { TaskBoard } from "@/components/TaskBoard";
 import { Sidebar } from "@/components/Sidebar";
 import { Spinner } from "@/components/Spinner";
@@ -21,6 +21,14 @@ export default function WorkflowPage() {
   const [editOpen, setEditOpen] = useState(false);
   const [shareOpen, setShareOpen] = useState(false);
   const [shareCopied, setShareCopied] = useState(false);
+  const [shares, setShares] = useState<WorkflowShare[]>([]);
+  const [shareModalOwner, setShareModalOwner] = useState<boolean | null>(null);
+  const [teams, setTeams] = useState<Team[]>([]);
+  const [inviteEmail, setInviteEmail] = useState("");
+  const [inviteTeamId, setInviteTeamId] = useState<number | null>(null);
+  const [inviteRole, setInviteRole] = useState<"viewer" | "editor">("viewer");
+  const [sharing, setSharing] = useState(false);
+  const [removingShareId, setRemovingShareId] = useState<number | null>(null);
 
   const refresh = () => {
     if (!id || id < 1) {
@@ -52,6 +60,19 @@ export default function WorkflowPage() {
     setLoading(true);
     refresh();
   }, [user, authLoading, id, router]);
+
+  useEffect(() => {
+    if (!shareOpen || !workflow) return;
+    setShareModalOwner(null);
+    api.workflows
+      .listShares(workflow.id)
+      .then((list) => {
+        setShares(list);
+        setShareModalOwner(true);
+      })
+      .catch(() => setShareModalOwner(false));
+    api.teams.list().then(setTeams).catch(() => setTeams([]));
+  }, [shareOpen, workflow?.id]);
 
   const onTaskUpdate = (taskId: number, updates: {
     status?: TaskStatus;
@@ -87,7 +108,7 @@ export default function WorkflowPage() {
   if (loading && !workflow) {
     return (
       <div className="flex h-screen overflow-hidden">
-        <Sidebar userEmail={user.email} onLogout={logout} />
+        <Sidebar user={user} onLogout={logout} />
         <main className="flex-1 min-h-0 flex flex-col items-center justify-center gap-3 p-8">
           <Spinner className="h-8 w-8" />
           <p className="text-muted text-sm">Loading workflow…</p>
@@ -99,7 +120,7 @@ export default function WorkflowPage() {
   if (!workflow) {
     return (
       <div className="flex h-screen overflow-hidden">
-        <Sidebar userEmail={user?.email ?? ""} onLogout={logout} />
+        <Sidebar user={user!} onLogout={logout} />
         <main className="flex-1 min-h-0 flex flex-col items-center justify-center gap-4 p-8">
           <p className="text-muted">Workflow not found.</p>
           {error && (
@@ -180,7 +201,7 @@ export default function WorkflowPage() {
 
   return (
     <div className="flex h-screen overflow-hidden">
-      <Sidebar userEmail={user.email} onLogout={logout} />
+      <Sidebar user={user} onLogout={logout} />
       <main className="flex-1 min-h-0 p-8 overflow-auto">
         <div className="max-w-6xl mx-auto">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-4">
@@ -211,21 +232,25 @@ export default function WorkflowPage() {
               <button onClick={exportMarkdown} className="px-3 py-1.5 rounded text-sm text-slate-300 hover:bg-[#253858] hover:text-white transition">
                 Export
               </button>
-              <button
-                onClick={() => setEditOpen(true)}
-                className="px-3 py-1.5 rounded text-sm text-slate-300 hover:bg-[#253858] hover:text-white transition"
-              >
-                Edit
-              </button>
+              {(workflow.role === "owner" || workflow.role === "editor") && (
+                <button
+                  onClick={() => setEditOpen(true)}
+                  className="px-3 py-1.5 rounded text-sm text-slate-300 hover:bg-[#253858] hover:text-white transition"
+                >
+                  Edit
+                </button>
+              )}
               <Link href="/dashboard" className="px-3 py-1.5 rounded text-sm text-slate-300 hover:bg-[#253858] hover:text-white transition inline-block">
                 Back
               </Link>
-              <button
-                onClick={handleDeleteWorkflow}
-                className="text-red-400 hover:bg-red-500/20 px-3 py-1.5 rounded text-sm transition"
-              >
-                Delete
-              </button>
+              {workflow.role === "owner" && (
+                <button
+                  onClick={handleDeleteWorkflow}
+                  className="text-red-400 hover:bg-red-500/20 px-3 py-1.5 rounded text-sm transition"
+                >
+                  Delete
+                </button>
+              )}
             </div>
           </div>
           {error && (
@@ -254,6 +279,7 @@ export default function WorkflowPage() {
             workflow={workflow}
             onTaskUpdate={onTaskUpdate}
             onRefresh={refresh}
+            canEdit={workflow.role !== "viewer"}
           />
         </div>
       </main>
@@ -269,9 +295,9 @@ export default function WorkflowPage() {
         />
       )}
 
-      {shareOpen && (
+      {shareOpen && workflow && (
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
-          <div className="card w-full max-w-md p-6">
+          <div className="card w-full max-w-lg p-6 max-h-[90vh] overflow-auto">
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-lg font-semibold text-white">Share workflow</h2>
               <button
@@ -282,10 +308,10 @@ export default function WorkflowPage() {
                 ✕
               </button>
             </div>
-            <p className="text-muted text-sm mb-3">
-              Share this workflow with others. They’ll need to sign in to Tasknex to view it.
+            <p className="text-muted text-sm mb-4">
+              Share this workflow with others. They need to sign in to Tasknex to view it.
             </p>
-            <div className="flex gap-2 mb-3">
+            <div className="flex gap-2 mb-4">
               <input
                 type="text"
                 readOnly
@@ -302,10 +328,149 @@ export default function WorkflowPage() {
             </div>
             <a
               href={mailtoHref}
-              className="inline-flex items-center gap-2 btn-secondary text-sm w-full justify-center"
+              className="inline-flex items-center gap-2 btn-secondary text-sm w-full justify-center mb-6"
             >
               <span aria-hidden>✉️</span> Share via email
             </a>
+
+            {shareModalOwner === null && (
+              <div className="flex items-center gap-2 py-4 text-muted text-sm">
+                <Spinner className="h-4 w-4" /> Loading…
+              </div>
+            )}
+            {shareModalOwner === true && (
+              <>
+                <hr className="border-[#253858] mb-4" />
+                <p className="text-muted text-xs font-medium uppercase tracking-wider mb-2">
+                  Shared with
+                </p>
+                {shares.length > 0 ? (
+                  <ul className="space-y-2 mb-4">
+                    {shares.map((s) => (
+                      <li
+                        key={s.id}
+                        className="flex items-center justify-between py-2 px-3 rounded bg-[#253858]/50 text-sm"
+                      >
+                        <span className="text-white">
+                          {s.user_id ? `User #${s.user_id}` : `Team #${s.team_id}`} · {s.role}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setRemovingShareId(s.id);
+                            api.workflows
+                              .unshare(workflow.id, s.id)
+                              .then(() => setShares((prev) => prev.filter((x) => x.id !== s.id)))
+                              .catch((e) => setError(e.message))
+                              .finally(() => setRemovingShareId(null));
+                          }}
+                          disabled={removingShareId === s.id}
+                          className="text-red-400 hover:bg-red-500/20 px-2 py-1 rounded text-xs disabled:opacity-50"
+                        >
+                          {removingShareId === s.id ? "…" : "Remove"}
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="text-muted text-sm mb-4">Not shared with anyone yet.</p>
+                )}
+                <p className="text-muted text-xs font-medium uppercase tracking-wider mb-2">
+                  Invite by email
+                </p>
+                <div className="flex gap-2 mb-3">
+                  <input
+                    type="email"
+                    value={inviteEmail}
+                    onChange={(e) => setInviteEmail(e.target.value)}
+                    placeholder="colleague@example.com"
+                    className="input-field flex-1 text-sm"
+                  />
+                  <select
+                    value={inviteRole}
+                    onChange={(e) => setInviteRole(e.target.value as "viewer" | "editor")}
+                    className="input-field w-24 text-sm"
+                  >
+                    <option value="viewer">Viewer</option>
+                    <option value="editor">Editor</option>
+                  </select>
+                  <button
+                    type="button"
+                    disabled={sharing || !inviteEmail.trim()}
+                    onClick={() => {
+                      setSharing(true);
+                      api.workflows
+                        .share(workflow.id, {
+                          share_with_user_email: inviteEmail.trim(),
+                          role: inviteRole,
+                        })
+                        .then((newShare) => {
+                          setShares((prev) => [...prev, newShare]);
+                          setInviteEmail("");
+                        })
+                        .catch((e) => setError(e.message))
+                        .finally(() => setSharing(false));
+                    }}
+                    className="btn-primary text-sm whitespace-nowrap disabled:opacity-50"
+                  >
+                    {sharing ? "…" : "Add"}
+                  </button>
+                </div>
+                {teams.length > 0 && (
+                  <>
+                    <p className="text-muted text-xs font-medium uppercase tracking-wider mb-2">
+                      Share with team
+                    </p>
+                    <div className="flex gap-2">
+                      <select
+                        value={inviteTeamId ?? ""}
+                        onChange={(e) =>
+                          setInviteTeamId(e.target.value ? Number(e.target.value) : null)
+                        }
+                        className="input-field flex-1 text-sm"
+                      >
+                        <option value="">Select team</option>
+                        {teams.map((t) => (
+                          <option key={t.id} value={t.id}>
+                            {t.name}
+                          </option>
+                        ))}
+                      </select>
+                      <select
+                        value={inviteRole}
+                        onChange={(e) => setInviteRole(e.target.value as "viewer" | "editor")}
+                        className="input-field w-24 text-sm"
+                      >
+                        <option value="viewer">Viewer</option>
+                        <option value="editor">Editor</option>
+                      </select>
+                      <button
+                        type="button"
+                        disabled={sharing || !inviteTeamId}
+                        onClick={() => {
+                          if (!inviteTeamId) return;
+                          setSharing(true);
+                          api.workflows
+                            .share(workflow.id, {
+                              share_with_team_id: inviteTeamId,
+                              role: inviteRole,
+                            })
+                            .then((newShare) => {
+                              setShares((prev) => [...prev, newShare]);
+                              setInviteTeamId(null);
+                            })
+                            .catch((e) => setError(e.message))
+                            .finally(() => setSharing(false));
+                        }}
+                        className="btn-primary text-sm whitespace-nowrap disabled:opacity-50"
+                      >
+                        {sharing ? "…" : "Add team"}
+                      </button>
+                    </div>
+                  </>
+                )}
+              </>
+            )}
           </div>
         </div>
       )}

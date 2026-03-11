@@ -31,6 +31,30 @@ MIGRATIONS = [
     "ALTER TABLE tasks ADD COLUMN IF NOT EXISTS due_date DATE;",
     "ALTER TABLE tasks ADD COLUMN IF NOT EXISTS labels TEXT;",
     "UPDATE tasks SET priority = 'medium' WHERE priority IS NULL;",
+    "ALTER TABLE users ADD COLUMN IF NOT EXISTS display_name VARCHAR(255);",
+    "ALTER TABLE users ADD COLUMN IF NOT EXISTS bio TEXT;",
+    """CREATE TABLE IF NOT EXISTS teams (
+        id SERIAL PRIMARY KEY,
+        name VARCHAR(255) NOT NULL,
+        owner_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );""",
+    """CREATE TABLE IF NOT EXISTS team_members (
+        id SERIAL PRIMARY KEY,
+        team_id INTEGER NOT NULL REFERENCES teams(id) ON DELETE CASCADE,
+        user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(team_id, user_id)
+    );""",
+    """CREATE TABLE IF NOT EXISTS workflow_shares (
+        id SERIAL PRIMARY KEY,
+        workflow_id INTEGER NOT NULL REFERENCES workflows(id) ON DELETE CASCADE,
+        user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+        team_id INTEGER REFERENCES teams(id) ON DELETE CASCADE,
+        role VARCHAR(20) DEFAULT 'viewer' NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        CHECK ((user_id IS NOT NULL AND team_id IS NULL) OR (user_id IS NULL AND team_id IS NOT NULL))
+    );""",
 ]
 
 
