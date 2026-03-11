@@ -24,6 +24,25 @@ Deploy the **backend** (FastAPI + PostgreSQL) and **frontend** (Next.js) as two 
 
 > **If you see:** `Failed building wheel for asyncpg` or `Failed building wheel for pydantic-core` with Python 3.13, the build is using Python 3.13 (which these packages don’t support yet). The repo has `backend/runtime.txt` and `backend/.python-version` set to **3.12** so Railway uses Python 3.12. If the error persists, in the backend service add a **Variable**: `RAILPACK_PYTHON_VERSION` = `3.12`, then redeploy.
 
+> **If you see:** `ConnectionRefusedError: [Errno 111] Connection refused` and **Application startup failed** in the logs, follow the steps in **["Quick fix: Connection refused"](#quick-fix-connection-refused)** below.
+
+> **If you see:** `ModuleNotFoundError: No module named 'psycopg2'` when starting the container, the app is receiving a `postgres://` or `postgresql://` URL and tried to use the wrong driver. The code now converts these to the async driver automatically. **Redeploy** (push the latest code or trigger a new deploy); if the error persists, set `DATABASE_URL` to a URL that starts with `postgresql+asyncpg://` (replace the first `postgres://` or `postgresql://` in the URL with `postgresql+asyncpg://`).
+
+#### Quick fix: Connection refused
+
+Do these in order:
+
+1. **Add PostgreSQL** (if you don’t have it): In the project, click **+ New** → **Database** → **PostgreSQL**. Wait until the Postgres service is running.
+2. **Open the backend service**: Click the card for your backend (the one from GitHub).
+3. **Open Variables**: Click the **Variables** tab (or **Settings** → **Variables**).
+4. **Add `DATABASE_URL`**:
+   - Click **+ New Variable** (or **Add Variable**).
+   - If you see **"Add Reference"** or **"Variable Reference"**: choose your **PostgreSQL** service, then the variable **`DATABASE_URL`**, and confirm.
+   - If you only see a normal "Variable" option: open the **PostgreSQL** service in another tab → **Variables** or **Connect** → copy the full URL. Back in the backend → Variables, add a variable named **`DATABASE_URL`** and paste that URL. (If it starts with `postgresql://`, the app will convert it for the async driver.)
+5. **Add `SECRET_KEY`** (if not already set): **+ New Variable** → name `SECRET_KEY`, value = a long random string (e.g. run `openssl rand -hex 32` locally and paste).
+6. **Redeploy**: Save any changes; Railway will redeploy. In **Deployments**, wait until the latest deployment is **Success**.
+7. **Check**: Open your backend URL (e.g. `https://your-backend.up.railway.app/api/health`). You should see `{"status":"ok"}`.
+
 ### 2.1 Add the service from GitHub
 
 1. In your Railway project (the same one where you added PostgreSQL), click **"+ New"** (or **"New"**).
@@ -92,7 +111,7 @@ You need the backend to use the Postgres database you added in step 1.
    - Click your **PostgreSQL** service.  
    - Open **Connect** or **Variables** and copy the **Postgres URL** (or connection string).  
    - In the **backend** service → Variables, add a variable named **`DATABASE_URL`** and paste that URL.  
-   - **Important:** If the URL is `postgresql://...`, change the start to `postgresql+asyncpg://...` (so Python’s async driver is used). Example: `postgresql+asyncpg://postgres:xxx@xxx.railway.app:5432/railway`.
+   - The app accepts `postgres://` or `postgresql://` and uses the async driver automatically; you can paste the URL as-is.
 
 ### 2.6 Generate a public URL for the backend
 

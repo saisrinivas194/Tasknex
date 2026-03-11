@@ -1,8 +1,22 @@
 from pydantic_settings import BaseSettings
 
 
+def _normalize_database_url(url: str) -> str:
+    """Use asyncpg driver; Railway often provides postgres:// or postgresql://."""
+    if url.startswith("postgresql+asyncpg://"):
+        return url
+    if url.startswith("postgresql://"):
+        return "postgresql+asyncpg://" + url[len("postgresql://"):]
+    if url.startswith("postgres://"):
+        return "postgresql+asyncpg://" + url[len("postgres://"):]
+    return url
+
+
 class Settings(BaseSettings):
     database_url: str = "postgresql+asyncpg://postgres:postgres@localhost:5432/workflow_builder"
+
+    def model_post_init(self, __context) -> None:
+        self.database_url = _normalize_database_url(self.database_url)
     secret_key: str = "your-secret-key-change-in-production"
     algorithm: str = "HS256"
     access_token_expire_minutes: int = 60 * 24 * 7  # 7 days
