@@ -1,0 +1,9 @@
+# Railway Config-as-Code for frontend (Next.js).
+# Use this service with Root Directory = "frontend" in the dashboard.
+# See https://docs.railway.com/reference/config-as-code
+
+[build]
+buildCommand = "npm ci && npm run build"
+
+[deploy]
+startCommand = "npm start"

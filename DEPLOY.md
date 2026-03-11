@@ -20,22 +20,83 @@ Deploy the **backend** (FastAPI + PostgreSQL) and **frontend** (Next.js) as two 
 
 ## 2. Deploy the backend
 
-1. In the same project, click **+ New** → **GitHub Repo** and select your repo.
-2. Configure the **backend** service:
-   - **Root Directory:** `backend`
-   - **Build Command:** (leave empty; Nixpacks will run `pip install -r requirements.txt`)
-   - **Start Command:** `uvicorn app.main:app --host 0.0.0.0 --port $PORT`
-   - Or use the **Procfile** in `backend/` (Railway will pick it up if root is `backend`).
+### 2.1 Add the service from GitHub
 
-3. **Variables** (Settings → Variables):
-   - `DATABASE_URL` — from the PostgreSQL service: use **Connect** → **Postgres URL** (or **Variable Reference** to link `DATABASE_URL` from the Postgres service).
-   - `SECRET_KEY` — generate a long random string (e.g. `openssl rand -hex 32`).
-   - `CORS_ORIGINS` — optional; leave empty to allow `*.railway.app` via regex, or set your frontend URL, e.g. `https://your-frontend.railway.app`.
-   - `OPENAI_API_KEY` — optional; for AI workflow generation.
+1. In your Railway project (the same one where you added PostgreSQL), click **"+ New"** (or **"New"**).
+2. Choose **"GitHub Repo"** (or **"Deploy from GitHub repo"**).
+3. If asked, connect your GitHub account and **select your Tasknex repo** (e.g. `saisrinivas194/Tasknex`).
+4. Railway will add a **new service** and start a build. You’ll see a card for this service (e.g. "Tasknex" or the repo name).
 
-4. **Link PostgreSQL:** In the backend service, **Variables** → **Add variable** → **Add reference** → choose the Postgres service’s `DATABASE_URL`.
+### 2.2 Set Root Directory (so Railway uses the `backend` folder)
 
-5. **Generate domain:** Backend service → **Settings** → **Networking** → **Generate domain**. Note the URL (e.g. `https://your-backend.up.railway.app`). The API base for the frontend is this URL + `/api`, e.g. `https://your-backend.up.railway.app/api`.
+Your repo has both `backend` and `frontend`. For this service we want only the **backend** folder.
+
+1. Click on the **backend service card** (the one you just added from GitHub).
+2. Open **Settings** (tab or "Settings" in the left/side menu).
+3. Find the **"Build"** or **"Source"** section.
+4. Look for **"Root Directory"** or **"Service Root"**.
+5. In the text box, type exactly:
+   ```text
+   backend
+   ```
+6. Save if there’s a **Save** or **Update** button. Railway will redeploy using the `backend` folder as the project root.
+
+**Why:** The app code (e.g. `app/main.py`) lives inside `backend/`. If Root Directory is empty, Railway looks at the repo root and won’t find `app`, so the build can fail.
+
+### 2.3 Set the Start Command (how the app runs)
+
+Railway needs to know which command starts your FastAPI app and that it listens on the port Railway provides (`$PORT`).
+
+1. Still in **Settings** for the backend service.
+2. Find **"Deploy"** or **"Start Command"** or **"Custom Start Command"**.
+3. If you see **"Start Command"** (or "Override Start Command"), set it to:
+   ```text
+   uvicorn app.main:app --host 0.0.0.0 --port $PORT
+   ```
+4. Leave **Build Command** empty (Railway will run `pip install -r requirements.txt` automatically for Python).
+
+**If you don’t see Start Command:** This repo uses **Config-as-Code**: `backend/railway.toml` already defines the start command. Once **Root Directory** is `backend`, Railway will read that file and use it. You can also type the start command manually in the dashboard if you prefer (see section 7).
+
+### 2.4 Add environment variables (Variables)
+
+1. In the backend service, go to the **Variables** tab (or **Settings** → **Variables**).
+2. Add these variables (use **"+ New Variable"** or **"Add Variable"** for each):
+
+| Variable        | What to put |
+|----------------|-------------|
+| `DATABASE_URL` | See step 2.5 below (link from Postgres). |
+| `SECRET_KEY`   | A long random string. Example: run `openssl rand -hex 32` in your terminal and paste the result. |
+
+Optional:
+
+| Variable         | What to put |
+|------------------|-------------|
+| `CORS_ORIGINS`  | Leave empty, or your frontend URL later (e.g. `https://your-app.railway.app`). |
+| `OPENAI_API_KEY`| Your OpenAI API key if you want AI workflow generation. |
+
+### 2.5 Link PostgreSQL to the backend
+
+You need the backend to use the Postgres database you added in step 1.
+
+1. In the **backend service** → **Variables** tab, click **"+ New Variable"** or **"Add Variable"**.
+2. Choose **"Add a variable"** or **"Reference"**.
+3. If you see **"Add Reference"** or **"Variable Reference"**:  
+   - Select the **PostgreSQL** service (the one you created in step 1).  
+   - Choose the variable **`DATABASE_URL`**.  
+   - Confirm. Railway will inject the database URL into your backend.
+4. If you don’t see "Reference":  
+   - Click your **PostgreSQL** service.  
+   - Open **Connect** or **Variables** and copy the **Postgres URL** (or connection string).  
+   - In the **backend** service → Variables, add a variable named **`DATABASE_URL`** and paste that URL.  
+   - **Important:** If the URL is `postgresql://...`, change the start to `postgresql+asyncpg://...` (so Python’s async driver is used). Example: `postgresql+asyncpg://postgres:xxx@xxx.railway.app:5432/railway`.
+
+### 2.6 Generate a public URL for the backend
+
+1. In the **backend service**, open **Settings** → **Networking** (or **"Generate domain"**).
+2. Click **"Generate domain"** (or **"Add domain"**). Railway will give you a URL like `https://your-service-name.up.railway.app`.
+3. **Copy this URL.** The frontend will need: **this URL + `/api`** (e.g. `https://your-service-name.up.railway.app/api`).
+
+After saving Variables and Root Directory, Railway will redeploy. Wait for the build to finish and the deployment to be **Success** (green). Then you can open the generated URL; e.g. `https://your-backend.up.railway.app/api/health` should return `{"status":"ok"}`.
 
 ---
 
@@ -73,9 +134,9 @@ cd backend && source venv/bin/activate && python run_migrations.py
 
 1. In the **same** Railway project, click **+ New** → **GitHub Repo** and select the **same** repo again (second service).
 2. Configure the **frontend** service:
-   - **Root Directory:** `frontend`
-   - **Build Command:** `npm ci && npm run build`
-   - **Start Command:** `npm start`
+   - **Root Directory:** `frontend`  
+     (Railway will then use **Config-as-Code** from `frontend/railway.toml` for build and start commands.)
+   - If you set them manually: **Build Command** = `npm ci && npm run build`, **Start Command** = `npm start`.
    - **Variables:**
      - `NEXT_PUBLIC_API_URL` = `https://YOUR_BACKEND_DOMAIN/api`  
        (e.g. `https://your-backend.up.railway.app/api` — no trailing slash, include `/api`)
@@ -102,6 +163,21 @@ cd backend && source venv/bin/activate && python run_migrations.py
 
 ---
 
-## 7. Optional: single repo with `railway.json`
+## 7. Config-as-Code (railway.toml)
 
-You can define services in a root `railway.json` (if using Railway’s monorepo support). Otherwise, configuring **Root Directory** and **Start Command** per service in the dashboard is enough.
+Railway can read build and deploy settings from a config file in your repo instead of only the dashboard. This repo is set up for that.
+
+**“Manage your build and deployment settings through a config file in this?”**  
+→ **Yes.** Once you set **Root Directory** for each service, Railway will use the config file inside that folder.
+
+| Service  | Root Directory (set in dashboard) | Config file Railway uses      |
+|----------|------------------------------------|--------------------------------|
+| Backend  | `backend`                          | `backend/railway.toml`         |
+| Frontend | `frontend`                         | `frontend/railway.toml`        |
+
+- **Backend:** `backend/railway.toml` sets the start command (`uvicorn app.main:app --host 0.0.0.0 --port $PORT`) and restart policy. You still need to set **Root Directory = `backend`** in the dashboard so Railway looks in the right folder.
+- **Frontend:** `frontend/railway.toml` sets build command (`npm ci && npm run build`) and start command (`npm start`). Set **Root Directory = `frontend`** in the dashboard.
+
+Settings in these files **override** the same settings in the dashboard. Variables (e.g. `DATABASE_URL`, `SECRET_KEY`) are **not** in the config file; add those in the dashboard **Variables** tab.
+
+Docs: [Railway Config-as-Code](https://docs.railway.com/reference/config-as-code).

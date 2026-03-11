@@ -1,8 +1,13 @@
-# Railway backend service: set "Root Directory" to backend in dashboard if deploying from monorepo.
+# Railway Config-as-Code for backend.
+# Use this service with Root Directory = "backend" in the dashboard.
+# See https://docs.railway.com/reference/config-as-code
+
 [build]
-builder = "nixpacks"
+# builder = "nixpacks"  # optional; Railway auto-detects Python
+# buildCommand left empty: Railway runs pip install -r requirements.txt
 
 [deploy]
 startCommand = "uvicorn app.main:app --host 0.0.0.0 --port $PORT"
 restartPolicyType = "on_failure"
 restartPolicyMaxRetries = 10
+# Optional: healthcheckPath = "/api/health"
