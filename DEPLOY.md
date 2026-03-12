@@ -96,6 +96,7 @@ Optional:
 |------------------|-------------|
 | `CORS_ORIGINS`  | Leave empty, or your frontend URL later (e.g. `https://your-app.railway.app`). |
 | `OPENAI_API_KEY`| Your OpenAI API key if you want AI workflow generation. |
+| `GOOGLE_CLIENT_ID` | Your Google Cloud Web client ID if you use Google one-click sign-in. |
 
 ### 2.5 Link PostgreSQL to the backend
 
@@ -220,11 +221,15 @@ If your Railway plan supports running a one-off command or a **Shell** in the ba
      4. Add `/api` at the end (no space). Example: `https://tasknex-backend.up.railway.app/api`  
      That full URL is what you paste as the **Value** for `NEXT_PUBLIC_API_URL`.
 
-4. **Generate a domain**  
+4. **Optional: Google SSO**  
+   - In the frontend **Variables** tab, add **`NEXT_PUBLIC_GOOGLE_CLIENT_ID`** = your Google Cloud Web client ID (same as in backend and Google Console).  
+   - Redeploy the frontend after adding it.
+
+5. **Generate a domain**  
    - In the frontend service, go to **Settings** → **Networking** (or **Generate domain**).  
    - Click **Generate domain**. Railway will show a URL like `https://your-frontend.up.railway.app`.
 
-5. **Open the app**  
+6. **Open the app**  
    Open that URL in your browser. That is your deployed app.
 
 ### If the frontend loads but the backend seems disconnected
@@ -241,25 +246,49 @@ If your Railway plan supports running a one-off command or a **Shell** in the ba
 
 ---
 
-## 5. Checklist
+## 5. Google SSO on Railway (optional)
+
+If you use **one-click Google sign-in**, set these so it works in production:
+
+### 5.1 Railway variables
+
+| Service  | Variable | Value |
+|----------|----------|--------|
+| **Backend** | `GOOGLE_CLIENT_ID` | Your Google Cloud **Web client ID** (same as in Google Cloud Console). |
+| **Frontend** | `NEXT_PUBLIC_GOOGLE_CLIENT_ID` | Same Web client ID as above. |
+
+Add them in each service’s **Variables** tab, then redeploy (frontend must be redeployed so the new env is baked in).
+
+### 5.2 Google Cloud Console
+
+1. Open [Google Cloud Console](https://console.cloud.google.com) → your project → **APIs & Services** → **Credentials**.
+2. Open your **OAuth 2.0 Client ID** (Web application).
+3. Under **Authorized JavaScript origins**, add your **production frontend** URL, e.g.:
+   - `https://your-frontend-name.up.railway.app`
+   (No path, no trailing slash.)
+4. Save. After that, the Google button on your Railway frontend will work.
+
+---
+
+## 6. Checklist
 
 | Item | Backend | Frontend |
 |------|---------|----------|
 | Root Directory | `backend` | `frontend` |
 | Start command | `uvicorn app.main:app --host 0.0.0.0 --port $PORT` | `npm start` |
-| Env vars | `DATABASE_URL`, `SECRET_KEY`, optional `CORS_ORIGINS`, `OPENAI_API_KEY` | `NEXT_PUBLIC_API_URL` = backend URL + `/api` |
+| Env vars | `DATABASE_URL`, `SECRET_KEY`, optional `CORS_ORIGINS`, `OPENAI_API_KEY`, **`GOOGLE_CLIENT_ID`** (for Google SSO) | `NEXT_PUBLIC_API_URL` = backend URL + `/api`, **`NEXT_PUBLIC_GOOGLE_CLIENT_ID`** (for Google SSO) |
 | Migrations | Run `python run_migrations.py` once after first deploy | — |
 
 ---
 
-## 6. Files to keep (and ignore)
+## 7. Files to keep (and ignore)
 
 - **Do not commit:** `venv/`, `node_modules/`, `.next/`, `.env`, `.env.local` (handled by `.gitignore`).
 - **Keep in repo:** `backend/Procfile`, `backend/railway.toml`, `backend/run_migrations.py`, `backend/migrations/`, `frontend/package.json`, all source code.
 
 ---
 
-## 7. Config-as-Code (railway.toml)
+## 8. Config-as-Code (railway.toml)
 
 Railway can read build and deploy settings from a config file in your repo instead of only the dashboard. This repo is set up for that.
 

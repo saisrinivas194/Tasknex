@@ -137,6 +137,11 @@ export type WorkflowShare = {
   role: string;
 };
 
+export type AuthTokenResponse = {
+  access_token: string;
+  user: User;
+};
+
 async function request<T>(
   path: string,
   options: RequestInit & { token?: string | null } = {}
@@ -185,15 +190,21 @@ async function request<T>(
 export const api = {
   auth: {
     signup: (email: string, password: string) =>
-      request<{ access_token: string; user: User }>("/auth/signup", {
+      request<AuthTokenResponse>("/auth/signup", {
         method: "POST",
         body: JSON.stringify({ email, password }),
         token: null,
       }),
     login: (email: string, password: string) =>
-      request<{ access_token: string; user: User }>("/auth/login", {
+      request<AuthTokenResponse>("/auth/login", {
         method: "POST",
         body: JSON.stringify({ email, password }),
+        token: null,
+      }),
+    googleLogin: (idToken: string) =>
+      request<AuthTokenResponse>("/auth/google", {
+        method: "POST",
+        body: JSON.stringify({ id_token: idToken }),
         token: null,
       }),
     me: () => request<User>("/auth/me"),

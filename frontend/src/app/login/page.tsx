@@ -6,6 +6,7 @@ import Link from "next/link";
 import { useAuth } from "@/components/AuthProvider";
 import { Logo } from "@/components/Logo";
 import { Spinner } from "@/components/Spinner";
+import { GoogleSSOButton } from "@/components/GoogleSSOButton";
 
 export default function LoginPage() {
   const [email, setEmail] = useState("");
@@ -33,7 +34,7 @@ export default function LoginPage() {
   return (
     <div className="min-h-screen flex flex-col items-center justify-center px-4 bg-navy">
       <Logo href="/" className="mb-6" />
-      <div className="card w-full max-w-md p-8">
+      <div className="card w-full max-w-md p-8 space-y-6">
         <h1 className="text-2xl font-bold text-white tracking-tight mb-2">Sign in</h1>
         <p className="text-muted text-sm mb-6">
           Don&apos;t have an account?{" "}
@@ -79,6 +80,14 @@ export default function LoginPage() {
             )}
           </button>
         </form>
+
+        <div className="flex items-center gap-3">
+          <div className="h-px flex-1 bg-[#253858]" />
+          <span className="text-muted text-xs uppercase tracking-wide">Or</span>
+          <div className="h-px flex-1 bg-[#253858]" />
+        </div>
+
+        <GoogleSSOButton variant="login" />
       </div>
     </div>
   );

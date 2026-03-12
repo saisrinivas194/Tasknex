@@ -6,6 +6,7 @@ import Link from "next/link";
 import { useAuth } from "@/components/AuthProvider";
 import { Logo } from "@/components/Logo";
 import { Spinner } from "@/components/Spinner";
+import { GoogleSSOButton } from "@/components/GoogleSSOButton";
 
 const MIN_PASSWORD_LENGTH = 8;
 
@@ -67,7 +68,7 @@ export default function SignupPage() {
   return (
     <div className="min-h-screen flex flex-col items-center justify-center px-4 py-8 bg-navy">
       <Logo href="/" className="mb-6" />
-      <div className="card w-full max-w-md p-8">
+      <div className="card w-full max-w-md p-8 space-y-6">
         <div className="mb-6">
           <h1 className="text-2xl font-bold text-white tracking-tight">Create your account</h1>
           <p className="text-muted text-sm mt-1">
@@ -75,12 +76,22 @@ export default function SignupPage() {
           </p>
         </div>
 
-        <p className="text-muted text-sm mb-6">
+        <p className="text-muted text-sm">
           Already have an account?{" "}
           <Link href="/login" className="text-primary hover:underline font-medium">
             Sign in
           </Link>
         </p>
+
+        <div className="mt-4">
+          <GoogleSSOButton variant="signup" />
+        </div>
+
+        <div className="flex items-center gap-3 mt-4">
+          <div className="h-px flex-1 bg-[#253858]" />
+          <span className="text-muted text-xs uppercase tracking-wide">Or sign up with email</span>
+          <div className="h-px flex-1 bg-[#253858]" />
+        </div>
 
         <form onSubmit={handleSubmit} className="space-y-5">
           {error && (

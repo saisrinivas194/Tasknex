@@ -5,7 +5,14 @@ from sqlalchemy import select, delete
 
 from app.database import get_db
 from app.models import User, Session
-from app.schemas import UserCreate, UserResponse, Token, ProfileUpdate, SessionResponse
+from app.schemas import (
+    UserCreate,
+    UserResponse,
+    Token,
+    ProfileUpdate,
+    SessionResponse,
+    GoogleLoginRequest,
+)
 from app.auth import (
     hash_password,
     verify_password,
@@ -13,6 +20,10 @@ from app.auth import (
     get_current_user,
     get_current_session_id,
 )
+from app.config import settings
+
+from google.oauth2 import id_token as google_id_token
+from google.auth.transport import requests as google_requests
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -49,6 +60,47 @@ async def login(data: UserCreate, db: AsyncSession = Depends(get_db)):
     user = result.scalar_one_or_none()
     if not user or not verify_password(data.password, user.password_hash):
         raise HTTPException(status_code=401, detail="Invalid email or password")
+    session = Session(id=str(uuid.uuid4()), user_id=user.id)
+    db.add(session)
+    await db.commit()
+    await db.refresh(user)
+    token = create_access_token(data={"sub": str(user.id)}, session_id=session.id)
+    return Token(access_token=token, user=UserResponse.model_validate(user))
+
+
+@router.post("/google", response_model=Token)
+async def google_login(body: GoogleLoginRequest, db: AsyncSession = Depends(get_db)):
+    """
+    Sign in or sign up with a Google ID token.
+
+    The frontend should obtain an ID token from Google (Google Identity Services)
+    and send it here as `id_token`. We validate it against GOOGLE_CLIENT_ID,
+    then create or reuse a local user and issue our own JWT + session.
+    """
+    if not settings.google_client_id:
+        raise HTTPException(status_code=500, detail="Google sign-in not configured")
+    try:
+        info = google_id_token.verify_oauth2_token(
+            body.id_token,
+            google_requests.Request(),
+            settings.google_client_id,
+        )
+    except Exception:
+        raise HTTPException(status_code=401, detail="Invalid Google token")
+
+    email = _normalize_email(info.get("email") or "")
+    if not email:
+        raise HTTPException(status_code=400, detail="Google account has no email")
+
+    # Find or create user
+    result = await db.execute(select(User).where(User.email == email))
+    user = result.scalar_one_or_none()
+    if not user:
+        display_name = (info.get("name") or "").strip() or None
+        user = User(email=email, password_hash=hash_password(uuid.uuid4().hex), display_name=display_name)
+        db.add(user)
+        await db.flush()
+
     session = Session(id=str(uuid.uuid4()), user_id=user.id)
     db.add(session)
     await db.commit()

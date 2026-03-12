@@ -10,6 +10,7 @@ type AuthContextType = {
   signup: (email: string, password: string) => Promise<void>;
   logout: () => void;
   refreshUser: () => Promise<void>;
+  loginWithGoogle: (idToken: string) => Promise<void>;
 };
 
 const AuthContext = createContext<AuthContextType | null>(null);
@@ -56,7 +57,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   return (
-    <AuthContext.Provider value={{ user, loading, login, signup, logout, refreshUser }}>
+    <AuthContext.Provider
+      value={{
+        user,
+        loading,
+        login,
+        signup,
+        logout,
+        refreshUser,
+        loginWithGoogle: async (idToken: string) => {
+          const { access_token, user: u } = await api.auth.googleLogin(idToken);
+          localStorage.setItem("token", access_token);
+          setUser(u);
+        },
+      }}
+    >
       {children}
     </AuthContext.Provider>
   );

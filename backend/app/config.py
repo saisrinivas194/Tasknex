@@ -22,6 +22,8 @@ class Settings(BaseSettings):
     access_token_expire_minutes: int = 60 * 24 * 7  # 7 days
     openai_api_key: str = ""
     openai_model: str = "gpt-4o-mini"
+    # Google OAuth client id for web (used to validate Google ID tokens)
+    google_client_id: str = ""
     # Comma-separated origins for CORS (e.g. https://yourapp.railway.app). Empty = localhost only.
     cors_origins: str = ""
 
