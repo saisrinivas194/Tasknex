@@ -113,7 +113,6 @@ export default function NewWorkflowPage() {
                   <div className="mt-3 text-xs text-muted space-y-2">
                     <p className="font-medium text-slate-300">Checklist:</p>
                     <ul className="list-disc list-inside space-y-0.5">
-                      <li>Start the backend in a <strong>separate terminal</strong> and leave it running.</li>
                       <li>
                         <a
                           href={backendHealthUrl}
@@ -134,11 +133,18 @@ export default function NewWorkflowPage() {
                         {connectionOk === true && " ✓ OK"}
                         {connectionOk === false && " ✗ Failed"}
                       </li>
-                      <li>Use the app at <strong>http://localhost:3000</strong>.</li>
+                      {typeof window !== "undefined" && backendHealthUrl.startsWith("https://") ? (
+                        <>
+                          <li>If the backend is on <strong>Railway</strong>, it may be sleeping — open the link above to wake it, then try again.</li>
+                          <li>If you&apos;re running the app at <strong>http://localhost:3000</strong>, the backend now allows CORS from localhost. Redeploy the backend if you just changed it.</li>
+                        </>
+                      ) : (
+                        <>
+                          <li>Start the backend in a <strong>separate terminal</strong>: <code className="bg-slate-700 px-1 rounded text-slate-300">cd backend && source venv/bin/activate && uvicorn app.main:app --reload --host 0.0.0.0 --port 8000</code></li>
+                          <li>Use the app at <strong>http://localhost:3000</strong>.</li>
+                        </>
+                      )}
                     </ul>
-                    <p className="pt-1">
-                      Run: <code className="bg-slate-700 px-1 rounded text-slate-300">cd backend && source venv/bin/activate && uvicorn app.main:app --reload --host 0.0.0.0 --port 8000</code>
-                    </p>
                   </div>
                 )}
               </div>

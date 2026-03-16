@@ -258,8 +258,7 @@ The app uses the backend URL from **two** places (runtime wins over build):
 2. **Build-time: Railway Variables**  
    In Railway → **Frontend** service → **Variables**, set **`NEXT_PUBLIC_API_URL`** = **`https://your-backend.up.railway.app/api`** (no trailing slash). Then **redeploy** the frontend (env is baked in at build).
 
-3. **If your frontend uses a custom domain** (not `*.up.railway.app`), add it to backend CORS:
-   - Backend → **Variables** → **`CORS_ORIGINS`** = your frontend URL. Then redeploy the backend.
+3. **CORS:** The backend always allows **http://localhost:3000** and **http://127.0.0.1:3000** so you can run the frontend locally and point it at the Railway backend. For a custom frontend domain, add it via **`CORS_ORIGINS`** (comma-separated); localhost stays allowed. Then redeploy the backend.
 
 ---
 

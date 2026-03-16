@@ -32,10 +32,10 @@ app = FastAPI(
 # Logging middleware first (outermost): assigns request_id, logs every request/response
 app.add_middleware(RequestLoggingMiddleware)
 
-# CORS: localhost for dev; in production set CORS_ORIGINS or rely on *.railway.app regex
-_origins = [o.strip() for o in settings.cors_origins.split(",") if o.strip()]
-if not _origins:
-    _origins = ["http://localhost:3000", "http://127.0.0.1:3000"]
+# CORS: always allow localhost for local dev; add CORS_ORIGINS for production frontend
+_localhost_origins = ["http://localhost:3000", "http://127.0.0.1:3000"]
+_extra = [o.strip() for o in settings.cors_origins.split(",") if o.strip()]
+_origins = list(dict.fromkeys(_localhost_origins + _extra))  # localhost first, then custom, no dupes
 app.add_middleware(
     CORSMiddleware,
     allow_origins=_origins,
