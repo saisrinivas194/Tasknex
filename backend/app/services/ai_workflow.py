@@ -1,11 +1,11 @@
 import json
-import logging
 
 import httpx
 
 from app.config import settings
+from app.log_config import get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 SYSTEM_PROMPT = """You are an expert project planner. You generate ONE workflow per goal. Each goal must get a UNIQUE workflow—different phase names, different task names, different structure. Never output the same generic workflow twice.
 

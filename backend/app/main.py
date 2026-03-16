@@ -1,11 +1,19 @@
+import traceback
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
 from app.config import settings
 from app.database import init_db
-from app.routers import auth, workflows, teams
+from app.log_config import get_logger, get_request_id, setup_logging
+from app.middleware.request_logging import RequestLoggingMiddleware
+from app.routers import auth, workflows, teams, log
+
+# Structured JSON logs; easy to grep and parse in Railway or any aggregator
+setup_logging(log_level=settings.log_level, json_logs=True)
+logger = get_logger(__name__)
 
 
 @asynccontextmanager
@@ -21,6 +29,9 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+# Logging middleware first (outermost): assigns request_id, logs every request/response
+app.add_middleware(RequestLoggingMiddleware)
+
 # CORS: localhost for dev; in production set CORS_ORIGINS or rely on *.railway.app regex
 _origins = [o.strip() for o in settings.cors_origins.split(",") if o.strip()]
 if not _origins:
@@ -34,6 +45,28 @@ app.add_middleware(
     allow_headers=["*"],
     expose_headers=["*"],
 )
+
+
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception) -> JSONResponse:
+    """Log unhandled exceptions with full traceback and request_id, then return 500."""
+    request_id = get_request_id()
+    tb = traceback.format_exc()
+    logger.exception(
+        "unhandled_exception",
+        extra={
+            "request_id": request_id,
+            "path": request.url.path,
+            "method": request.method,
+            "error": str(exc),
+            "traceback": tb,
+        },
+    )
+    return JSONResponse(
+        status_code=500,
+        content={"detail": "Internal server error", "request_id": request_id},
+        headers={"X-Request-ID": request_id or ""},
+    )
 
 @app.get("/")
 def root():
@@ -51,3 +84,4 @@ def health():
 app.include_router(auth.router, prefix="/api")
 app.include_router(workflows.router, prefix="/api")
 app.include_router(teams.router, prefix="/api")
+app.include_router(log.router, prefix="/api")

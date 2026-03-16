@@ -14,15 +14,18 @@ export default function NewWorkflowPage() {
   const [goal, setGoal] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [successMessage, setSuccessMessage] = useState("");
   const [connectionOk, setConnectionOk] = useState<boolean | null>(null);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!goal.trim()) return;
     setError("");
+    setSuccessMessage("");
     setLoading(true);
     try {
       const workflow = await api.workflows.generate(goal.trim());
+      setSuccessMessage("Workflow created! Opening…");
       router.push(`/workflow/${workflow.id}`);
       router.refresh();
     } catch (err) {
@@ -74,6 +77,12 @@ export default function NewWorkflowPage() {
           </p>
 
           <form onSubmit={handleSubmit} className="card p-6 space-y-4">
+            {successMessage && (
+              <div className="text-sm rounded-lg px-3 py-2 border text-emerald-200 bg-emerald-500/10 border-emerald-500/30 flex items-center gap-2" role="status">
+                <span>✓</span>
+                <span>{successMessage}</span>
+              </div>
+            )}
             {error && (
               <div
                 className={`text-sm rounded-lg px-3 py-2 border ${
@@ -84,6 +93,9 @@ export default function NewWorkflowPage() {
                 role="alert"
               >
                 {error}
+                <p className="mt-2 text-slate-300 text-xs">
+                  If a new workflow appeared in <Link href="/dashboard" className="text-primary hover:underline font-medium">Workflows</Link>, it was created — open it from there.
+                </p>
                 {error.includes("Cannot reach the server") && (
                   <div className="mt-3 text-xs text-muted space-y-2">
                     <p className="font-medium text-slate-300">Checklist:</p>

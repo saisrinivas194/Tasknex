@@ -1,5 +1,28 @@
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api";
 
+/** Report a client-side error to the backend for log tracking. Fire-and-forget; never throws. */
+export function reportClientError(payload: {
+  message: string;
+  stack?: string | null;
+  url?: string | null;
+  level?: string;
+}): void {
+  if (typeof window === "undefined") return;
+  const body = {
+    message: payload.message,
+    stack: payload.stack ?? null,
+    url: payload.url ?? window.location?.href ?? null,
+    user_agent: typeof navigator !== "undefined" ? navigator.userAgent : null,
+    level: payload.level ?? "error",
+  };
+  fetch(`${API_BASE}/log/client-error`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+    keepalive: true,
+  }).catch(() => {});
+}
+
 /** Backend health check URL (same origin as API). Open in browser to verify backend is running. */
 export const BACKEND_HEALTH_URL =
   (API_BASE.replace(/\/api\/?$/, "") || "http://localhost:8000") + "/api/health";
@@ -386,5 +409,8 @@ export const api = {
       }),
     delete: (id: number) =>
       request<void>(`/teams/${id}`, { method: "DELETE" }),
+  },
+  log: {
+    reportClientError,
   },
 };

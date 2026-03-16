@@ -244,6 +244,19 @@ If your Railway plan supports running a one-off command or a **Shell** in the ba
 - **Check 3 – Browser Network tab**  
   On your frontend page, open DevTools (F12) → **Network**. Try logging in or loading the dashboard. Look for requests to your backend domain; if they are red or show CORS/blocked, the frontend is not talking to the right backend or CORS is blocking. Fix `NEXT_PUBLIC_API_URL` and redeploy the frontend.
 
+### "Cannot reach the server" on live site (e.g. AI Generator)
+
+Your backend is at **`https://spectacular-emotion-production-3245.up.railway.app`** (port 8080 is handled by Railway). The **live** frontend must be built with that URL.
+
+1. **Railway → Frontend service → Variables**
+   - Set **`NEXT_PUBLIC_API_URL`** = **`https://spectacular-emotion-production-3245.up.railway.app/api`** (no trailing slash).
+
+2. **Redeploy the frontend**
+   - Variables are baked in at **build** time. Change the variable, then trigger a new deploy (e.g. **Deployments** → **Redeploy** or push a commit). Without a redeploy, the live site keeps using the old API URL.
+
+3. **If your frontend uses a custom domain** (not `*.up.railway.app`), add it to backend CORS:
+   - Backend → **Variables** → **`CORS_ORIGINS`** = your frontend URL, e.g. `https://yourdomain.com` (comma-separated if multiple). Then redeploy the backend.
+
 ---
 
 ## 5. Google SSO on Railway (optional)
@@ -278,6 +291,35 @@ Add them in each service’s **Variables** tab, then redeploy (frontend must be 
 | Start command | `uvicorn app.main:app --host 0.0.0.0 --port $PORT` | `npm start` |
 | Env vars | `DATABASE_URL`, `SECRET_KEY`, optional `CORS_ORIGINS`, `OPENAI_API_KEY`, **`GOOGLE_CLIENT_ID`** (for Google SSO) | `NEXT_PUBLIC_API_URL` = backend URL + `/api`, **`NEXT_PUBLIC_GOOGLE_CLIENT_ID`** (for Google SSO) |
 | Migrations | Run `python run_migrations.py` once after first deploy | — |
+
+---
+
+## 6.1 Troubleshooting: Can't log in on Railway
+
+If the app loads but **login fails** (email/password or Google) after going online:
+
+1. **Frontend must call the correct backend**
+   - Railway → **Frontend** service → **Variables**.
+   - Set **`NEXT_PUBLIC_API_URL`** = your **backend** public URL + **`/api`** (e.g. `https://tasknex-production.up.railway.app/api` or whatever your backend domain is). No trailing slash.
+   - **Redeploy the frontend** after changing it (env is baked in at build time).
+
+2. **Backend must be up and reachable**
+   - In a browser, open: `https://YOUR_BACKEND_DOMAIN/api/health`
+   - You should see `{"status":"ok"}`. If you get an error or timeout, fix the backend (see below) or the URL.
+
+3. **Backend env vars (required for login)**
+   - **Backend** → **Variables** must have:
+     - **`DATABASE_URL`** – from Railway Postgres (or your DB). Wrong or missing → login will fail.
+     - **`SECRET_KEY`** – a long random string for JWT. Missing or default → tokens can be invalid.
+   - After first deploy, run **migrations** once (Backend → run `python run_migrations.py` or use Railway CLI/shell) so the `users` table exists.
+
+4. **Google sign-in only**
+   - **Backend**: variable **`GOOGLE_CLIENT_ID`** = your Google Web client ID.
+   - **Frontend**: variable **`NEXT_PUBLIC_GOOGLE_CLIENT_ID`** = same client ID; then **redeploy frontend**.
+   - In [Google Cloud Console](https://console.cloud.google.com) → Credentials → your OAuth client → **Authorized JavaScript origins** must include your **production frontend** URL (e.g. `https://your-app.up.railway.app`). No path, no trailing slash.
+
+5. **See the real error**
+   - In the browser: **F12** → **Network**. Try logging in. Click the request to `/auth/login` or `/auth/google`. Check **Status** (e.g. 401, 500) and **Response** to see the backend error message.
 
 ---
 

@@ -26,6 +26,8 @@ class Settings(BaseSettings):
     google_client_id: str = ""
     # Comma-separated origins for CORS (e.g. https://yourapp.railway.app). Empty = localhost only.
     cors_origins: str = ""
+    # Log level: DEBUG, INFO, WARNING, ERROR. Used by app/log_config.py.
+    log_level: str = "INFO"
 
     class Config:
         env_file = ".env"
