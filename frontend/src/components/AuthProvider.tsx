@@ -25,8 +25,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setLoading(false);
       return;
     }
-    api.auth
-      .me()
+    const ME_TIMEOUT_MS = 10_000;
+    const timeoutPromise = new Promise<never>((_, reject) =>
+      setTimeout(() => reject(new Error("Auth check timeout")), ME_TIMEOUT_MS)
+    );
+    Promise.race([api.auth.me(), timeoutPromise])
       .then(setUser)
       .catch(() => localStorage.removeItem("token"))
       .finally(() => setLoading(false));
