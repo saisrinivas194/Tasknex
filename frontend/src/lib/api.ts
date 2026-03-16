@@ -1,4 +1,46 @@
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api";
+const BUILD_TIME_API_BASE =
+  process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api";
+
+// Runtime config: load from /config.json so deployed app can use correct backend without rebuild
+let runtimeApiBase: string | null = null;
+let configLoadPromise: Promise<void> | null = null;
+
+async function loadRuntimeConfig(): Promise<void> {
+  if (configLoadPromise) return configLoadPromise;
+  configLoadPromise = (async () => {
+    if (typeof window === "undefined") return;
+    try {
+      const r = await fetch("/config.json", { cache: "no-store" });
+      if (r.ok) {
+        const j = await r.json();
+        const url = j?.apiUrl;
+        if (typeof url === "string" && url.trim()) {
+          const base = url.trim().replace(/\/+$/, "");
+          runtimeApiBase = base.includes("/api") ? base : `${base}/api`;
+        }
+      }
+    } catch {
+      // ignore
+    }
+  })();
+  return configLoadPromise;
+}
+
+/** API base URL (after optional runtime config is loaded). Use getApiBase() in request(). */
+function getApiBaseSync(): string {
+  return runtimeApiBase ?? BUILD_TIME_API_BASE;
+}
+
+/** Call before making API requests so runtime config is used. */
+export async function ensureApiConfig(): Promise<void> {
+  await loadRuntimeConfig();
+}
+
+/** Backend base URL for display/health link. Resolves after ensureApiConfig(). */
+export function getBackendHealthUrl(): string {
+  const base = getApiBaseSync().replace(/\/api\/?$/, "") || "http://localhost:8000";
+  return `${base}/api/health`;
+}
 
 /** Report a client-side error to the backend for log tracking. Fire-and-forget; never throws. */
 export function reportClientError(payload: {
@@ -15,7 +57,8 @@ export function reportClientError(payload: {
     user_agent: typeof navigator !== "undefined" ? navigator.userAgent : null,
     level: payload.level ?? "error",
   };
-  fetch(`${API_BASE}/log/client-error`, {
+  const base = getApiBaseSync();
+  fetch(`${base}/log/client-error`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
@@ -23,9 +66,9 @@ export function reportClientError(payload: {
   }).catch(() => {});
 }
 
-/** Backend health check URL (same origin as API). Open in browser to verify backend is running. */
+/** Backend health URL (build-time default). Prefer getBackendHealthUrl() after ensureApiConfig(). */
 export const BACKEND_HEALTH_URL =
-  (API_BASE.replace(/\/api\/?$/, "") || "http://localhost:8000") + "/api/health";
+  (BUILD_TIME_API_BASE.replace(/\/api\/?$/, "") || "http://localhost:8000") + "/api/health";
 
 function getToken(): string | null {
   if (typeof window === "undefined") return null;
@@ -169,6 +212,8 @@ async function request<T>(
   path: string,
   options: RequestInit & { token?: string | null } = {}
 ): Promise<T> {
+  await loadRuntimeConfig();
+  const base = getApiBaseSync();
   const { token, ...init } = options;
   const t = token ?? getToken();
   const headers: HeadersInit = {
@@ -178,13 +223,13 @@ async function request<T>(
   if (t) (headers as Record<string, string>)["Authorization"] = `Bearer ${t}`;
   let res: Response;
   try {
-    res = await fetch(`${API_BASE}${path}`, { ...init, headers });
+    res = await fetch(`${base}${path}`, { ...init, headers });
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
     if (msg === "Failed to fetch" || e instanceof TypeError) {
-      const base = API_BASE.replace(/\/api\/?$/, "") || "http://localhost:8000";
+      const baseDisplay = base.replace(/\/api\/?$/, "") || "http://localhost:8000";
       throw new Error(
-        `Cannot reach the server at ${base}. Check: (1) Backend is running (e.g. uvicorn on port 8000). (2) API URL is correct — set NEXT_PUBLIC_API_URL to your backend URL + /api (e.g. https://your-backend.up.railway.app/api).`
+        `Cannot reach the server at ${baseDisplay}. Check: (1) Backend is running (e.g. uvicorn on port 8000). (2) API URL is correct — set NEXT_PUBLIC_API_URL to your backend URL + /api (e.g. https://your-backend.up.railway.app/api).`
       );
     }
     throw e;

@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useAuth } from "@/components/AuthProvider";
 import { Spinner } from "@/components/Spinner";
-import { api, BACKEND_HEALTH_URL } from "@/lib/api";
+import { api, ensureApiConfig, getBackendHealthUrl, BACKEND_HEALTH_URL } from "@/lib/api";
 import { Sidebar } from "@/components/Sidebar";
 
 export default function NewWorkflowPage() {
@@ -16,6 +16,7 @@ export default function NewWorkflowPage() {
   const [error, setError] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
   const [connectionOk, setConnectionOk] = useState<boolean | null>(null);
+  const [backendHealthUrl, setBackendHealthUrl] = useState(BACKEND_HEALTH_URL);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -39,10 +40,16 @@ export default function NewWorkflowPage() {
     if (!authLoading && !user) router.push("/login");
   }, [user, authLoading, router]);
 
+  useEffect(() => {
+    ensureApiConfig().then(() => setBackendHealthUrl(getBackendHealthUrl()));
+  }, []);
+
   async function testConnection() {
     setConnectionOk(null);
+    await ensureApiConfig();
+    const url = getBackendHealthUrl();
     try {
-      const res = await fetch(BACKEND_HEALTH_URL);
+      const res = await fetch(url);
       setConnectionOk(res.ok);
     } catch {
       setConnectionOk(false);
@@ -96,6 +103,12 @@ export default function NewWorkflowPage() {
                 <p className="mt-2 text-slate-300 text-xs">
                   If a new workflow appeared in <Link href="/dashboard" className="text-primary hover:underline font-medium">Workflows</Link>, it was created — open it from there.
                 </p>
+                {error.includes("Cannot reach the server") && typeof window !== "undefined" && !window.location.origin.startsWith("http://localhost") && (
+                  <div className="mt-2 p-2 rounded bg-slate-700/50 border border-slate-600 text-slate-200 text-xs">
+                    <p className="font-medium">You’re on the live site.</p>
+                    <p className="mt-1">The app loads the backend URL from <strong>/config.json</strong>. Ensure <code className="bg-slate-800 px-1 rounded">public/config.json</code> in your repo contains <code className="bg-slate-800 px-1 rounded">{"{\"apiUrl\": \"https://your-backend.up.railway.app/api\"}"}</code> and redeploy the frontend.</p>
+                  </div>
+                )}
                 {error.includes("Cannot reach the server") && (
                   <div className="mt-3 text-xs text-muted space-y-2">
                     <p className="font-medium text-slate-300">Checklist:</p>
@@ -103,7 +116,7 @@ export default function NewWorkflowPage() {
                       <li>Start the backend in a <strong>separate terminal</strong> and leave it running.</li>
                       <li>
                         <a
-                          href={BACKEND_HEALTH_URL}
+                          href={backendHealthUrl}
                           target="_blank"
                           rel="noopener noreferrer"
                           className="text-primary hover:underline"

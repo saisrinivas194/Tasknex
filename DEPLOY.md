@@ -246,16 +246,20 @@ If your Railway plan supports running a one-off command or a **Shell** in the ba
 
 ### "Cannot reach the server" on live site (e.g. AI Generator)
 
-Your backend is at **`https://spectacular-emotion-production-3245.up.railway.app`** (port 8080 is handled by Railway). The **live** frontend must be built with that URL.
+The app uses the backend URL from **two** places (runtime wins over build):
 
-1. **Railway → Frontend service → Variables**
-   - Set **`NEXT_PUBLIC_API_URL`** = **`https://spectacular-emotion-production-3245.up.railway.app/api`** (no trailing slash).
+1. **Runtime (recommended): `frontend/public/config.json`**  
+   The app fetches **`/config.json`** on load and uses **`apiUrl`** if present. So you can fix the live site without redeploying by ensuring this file exists in your repo and is deployed:
+   ```json
+   { "apiUrl": "https://spectacular-emotion-production-3245.up.railway.app/api" }
+   ```
+   Replace with your real backend URL + **`/api`**. Commit and push; the next frontend deploy will serve this file and the app will use it.
 
-2. **Redeploy the frontend**
-   - Variables are baked in at **build** time. Change the variable, then trigger a new deploy (e.g. **Deployments** → **Redeploy** or push a commit). Without a redeploy, the live site keeps using the old API URL.
+2. **Build-time: Railway Variables**  
+   In Railway → **Frontend** service → **Variables**, set **`NEXT_PUBLIC_API_URL`** = **`https://your-backend.up.railway.app/api`** (no trailing slash). Then **redeploy** the frontend (env is baked in at build).
 
 3. **If your frontend uses a custom domain** (not `*.up.railway.app`), add it to backend CORS:
-   - Backend → **Variables** → **`CORS_ORIGINS`** = your frontend URL, e.g. `https://yourdomain.com` (comma-separated if multiple). Then redeploy the backend.
+   - Backend → **Variables** → **`CORS_ORIGINS`** = your frontend URL. Then redeploy the backend.
 
 ---
 
