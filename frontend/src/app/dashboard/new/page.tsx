@@ -44,15 +44,29 @@ export default function NewWorkflowPage() {
     ensureApiConfig().then(() => setBackendHealthUrl(getBackendHealthUrl()));
   }, []);
 
-  async function testConnection() {
+  async function testConnection(): Promise<boolean> {
     setConnectionOk(null);
     await ensureApiConfig();
     const url = getBackendHealthUrl();
     try {
       const res = await fetch(url);
-      setConnectionOk(res.ok);
+      const ok = res.ok;
+      setConnectionOk(ok);
+      return ok;
     } catch {
       setConnectionOk(false);
+      return false;
+    }
+  }
+
+  async function wakeBackendAndRetry() {
+    setError("");
+    const ok = await testConnection();
+    if (ok) {
+      setSuccessMessage("Backend is up. Click \"Generate workflow\" again.");
+      setTimeout(() => setSuccessMessage(""), 5000);
+    } else {
+      setError("Backend still unreachable. Open the \"Verify backend in new tab\" link to wake Railway, then click \"Wake backend & retry\" again.");
     }
   }
 
@@ -111,7 +125,15 @@ export default function NewWorkflowPage() {
                 )}
                 {error.includes("Cannot reach the server") && (
                   <div className="mt-3 text-xs text-muted space-y-2">
-                    <p className="font-medium text-slate-300">Checklist:</p>
+                    <p className="font-medium text-slate-300">Quick fix:</p>
+                    <button
+                      type="button"
+                      onClick={wakeBackendAndRetry}
+                      className="mt-1 px-3 py-1.5 rounded bg-amber-500/20 border border-amber-500/40 text-amber-200 font-medium hover:bg-amber-500/30"
+                    >
+                      Wake backend & retry
+                    </button>
+                    <p className="font-medium text-slate-300 mt-2">Checklist:</p>
                     <ul className="list-disc list-inside space-y-0.5">
                       <li>
                         <a
@@ -125,7 +147,7 @@ export default function NewWorkflowPage() {
                         {" "}— if you see {"{"}"status":"ok"{"}"}, the backend is up.{" "}
                         <button
                           type="button"
-                          onClick={testConnection}
+                          onClick={() => testConnection()}
                           className="text-primary hover:underline font-medium"
                         >
                           Test connection from app
