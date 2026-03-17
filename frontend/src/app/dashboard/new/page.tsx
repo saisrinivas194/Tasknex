@@ -123,6 +123,16 @@ export default function NewWorkflowPage() {
                     <p className="mt-1">The app loads the backend URL from <strong>/config.json</strong>. Ensure <code className="bg-slate-800 px-1 rounded">public/config.json</code> in your repo contains <code className="bg-slate-800 px-1 rounded">{"{\"apiUrl\": \"https://your-backend.up.railway.app/api\"}"}</code> and redeploy the frontend.</p>
                   </div>
                 )}
+                {error.includes("Cannot reach the server") && connectionOk === true && (
+                  <p className="mt-2 text-amber-200/90 text-xs">
+                    Connection test passed, so the backend is reachable. The request may have timed out (AI can take 1–2 min). Try &quot;Generate workflow&quot; again, or check <Link href="/dashboard" className="text-primary hover:underline">Workflows</Link> — it may have been created.
+                  </p>
+                )}
+                {error.includes("Request timed out") && (
+                  <p className="mt-2 text-amber-200/90 text-xs">
+                    Check <Link href="/dashboard" className="text-primary hover:underline">Workflows</Link> — the workflow may have been created.
+                  </p>
+                )}
                 {error.includes("Cannot reach the server") && (
                   <div className="mt-3 text-xs text-muted space-y-2">
                     <p className="font-medium text-slate-300">Quick fix:</p>

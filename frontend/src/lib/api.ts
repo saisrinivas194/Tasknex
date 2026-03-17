@@ -210,21 +210,36 @@ export type AuthTokenResponse = {
 
 async function request<T>(
   path: string,
-  options: RequestInit & { token?: string | null } = {}
+  options: RequestInit & { token?: string | null; timeout?: number } = {}
 ): Promise<T> {
   await loadRuntimeConfig();
   const base = getApiBaseSync();
-  const { token, ...init } = options;
+  const { token, timeout: timeoutMs, ...init } = options;
   const t = token ?? getToken();
   const headers: HeadersInit = {
     "Content-Type": "application/json",
     ...(init.headers as Record<string, string>),
   };
   if (t) (headers as Record<string, string>)["Authorization"] = `Bearer ${t}`;
+  const controller = timeoutMs != null && timeoutMs > 0 ? new AbortController() : undefined;
+  const timeoutId = controller
+    ? setTimeout(() => controller.abort(), timeoutMs)
+    : undefined;
   let res: Response;
   try {
-    res = await fetch(`${base}${path}`, { ...init, headers });
+    res = await fetch(`${base}${path}`, {
+      ...init,
+      headers,
+      signal: controller?.signal,
+    });
   } catch (e) {
+    if (timeoutId) clearTimeout(timeoutId);
+    const isAbort = e instanceof Error && e.name === "AbortError";
+    if (isAbort) {
+      throw new Error(
+        "Request timed out. The workflow may still have been created — check Workflows."
+      );
+    }
     const msg = e instanceof Error ? e.message : String(e);
     if (msg === "Failed to fetch" || e instanceof TypeError) {
       const baseDisplay = base.replace(/\/api\/?$/, "") || "http://localhost:8000";
@@ -234,6 +249,7 @@ async function request<T>(
     }
     throw e;
   }
+  if (timeoutId) clearTimeout(timeoutId);
   if (!res.ok) {
     const err = await res.json().catch(() => ({ detail: res.statusText }));
     const message =
@@ -296,6 +312,7 @@ export const api = {
       request<Workflow>("/workflows/generate", {
         method: "POST",
         body: JSON.stringify({ goal }),
+        timeout: 120000,
       }),
     update: (
       id: number,
