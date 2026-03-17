@@ -8,6 +8,13 @@ from app.log_config import get_logger, get_request_id
 router = APIRouter(prefix="/log", tags=["logging"])
 
 
+@router.get("/ping")
+@router.post("/ping")
+def ping() -> dict:
+    """No-auth ping for diagnostics (e.g. verify POST + CORS from frontend)."""
+    return {"ok": True}
+
+
 class ClientErrorPayload(BaseModel):
     message: str
     stack: str | None = None

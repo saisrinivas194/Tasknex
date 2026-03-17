@@ -260,6 +260,8 @@ The app uses the backend URL from **two** places (runtime wins over build):
 
 3. **CORS:** The backend always allows **http://localhost:3000** and **http://127.0.0.1:3000** so you can run the frontend locally and point it at the Railway backend. For a custom frontend domain, add it via **`CORS_ORIGINS`** (comma-separated); localhost stays allowed. Then redeploy the backend.
 
+4. **Health OK but Generate fails:** If "Test connection" shows ✓ OK but "Generate workflow" still shows "Cannot reach the server", the backend is up but the **long-running** request (AI can take 1–2 min) may be cut by a **proxy/ingress timeout** (e.g. 60s). The workflow might still be created. Use **Open Workflows** or the **"Open [title]"** button on the error box to check. For a permanent fix, consider making generate async (return 202 and poll) or increasing the platform request timeout if Railway allows it.
+
 ---
 
 ## 5. Google SSO on Railway (optional)
@@ -313,7 +315,7 @@ If the app loads but **login fails** (email/password or Google) after going onli
 3. **Backend env vars (required for login)**
    - **Backend** → **Variables** must have:
      - **`DATABASE_URL`** – from Railway Postgres (or your DB). Wrong or missing → login will fail.
-     - **`SECRET_KEY`** – a long random string for JWT. Missing or default → tokens can be invalid.
+     - **`SECRET_KEY`** – a long random string for JWT (e.g. `openssl rand -hex 32`). Missing or default → tokens can be invalid; the backend logs a startup warning if the default value is used.
    - After first deploy, run **migrations** once (Backend → run `python run_migrations.py` or use Railway CLI/shell) so the `users` table exists.
 
 4. **Google sign-in only**

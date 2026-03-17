@@ -1,5 +1,5 @@
 from datetime import datetime, date
-from pydantic import BaseModel, EmailStr, field_validator
+from pydantic import BaseModel, EmailStr, field_validator, Field
 from app.models import TaskStatus, TaskPriority
 
 
@@ -256,7 +256,11 @@ class WorkflowListItem(BaseModel):
 
 
 class GenerateWorkflowRequest(BaseModel):
-    goal: str
+    goal: str = Field(..., min_length=1, max_length=2000, description="User goal for workflow generation")
+
+
+class GenerateWorkflowAsyncResponse(BaseModel):
+    workflow_id: int
 
 
 class AIAssistantRequest(BaseModel):

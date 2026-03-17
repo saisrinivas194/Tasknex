@@ -24,6 +24,7 @@ from app.schemas import (
     WorkflowCreate,
     WorkflowResponse,
     WorkflowListItem,
+    GenerateWorkflowAsyncResponse,
     StepCreate,
     StepOrderUpdate,
     StepResponse,
@@ -45,6 +46,11 @@ from app.schemas import (
 from app.auth import get_current_user
 from app.services.ai_workflow import generate_workflow_from_goal, ai_assistant_add_tasks
 from app.workflow_access import get_workflow_and_access
+from app.database import AsyncSessionLocal
+from app.log_config import get_logger
+from fastapi import BackgroundTasks
+
+logger = get_logger(__name__)
 
 router = APIRouter(prefix="/workflows", tags=["workflows"])
 
@@ -88,6 +94,49 @@ def _task_to_response(task: Task, comment_count: int = 0) -> TaskResponse:
     )
 
 
+async def _generate_workflow_background(workflow_id: int, goal: str) -> None:
+    """Run AI generation and fill workflow steps in a new DB session. Logs errors; does not re-raise."""
+    async with AsyncSessionLocal() as db:
+        try:
+            data = await generate_workflow_from_goal(goal)
+            title = data.get("title", goal[:200])
+            result = await db.execute(select(Workflow).where(Workflow.id == workflow_id))
+            workflow = result.scalar_one_or_none()
+            if not workflow:
+                logger.warning("generate_workflow_background: workflow_id=%s not found", workflow_id)
+                return
+            workflow.title = title
+            for phase in sorted(data.get("phases", []), key=lambda p: p.get("order", 0)):
+                step = Step(
+                    workflow_id=workflow_id,
+                    title=phase.get("title", "Phase"),
+                    step_order=phase.get("order", 0),
+                )
+                db.add(step)
+                await db.flush()
+                for t in phase.get("tasks", []):
+                    task = Task(
+                        step_id=step.id,
+                        title=t.get("title", "Task"),
+                        description=t.get("description", ""),
+                        document_url=None,
+                        status=TaskStatus.planned,
+                        priority=TaskPriority.medium,
+                        due_date=None,
+                        labels=None,
+                    )
+                    db.add(task)
+            await db.commit()
+        except Exception as e:
+            await db.rollback()
+            logger.exception(
+                "generate_workflow_background failed for workflow_id=%s: %s",
+                workflow_id,
+                e,
+                extra={"workflow_id": workflow_id, "goal_preview": goal[:80]},
+            )
+
+
 @router.post("/generate", response_model=WorkflowResponse)
 async def generate_workflow(
     body: GenerateWorkflowRequest,
@@ -128,6 +177,26 @@ async def generate_workflow(
     )
     workflow = result.scalar_one()
     return WorkflowResponse.model_validate(workflow)
+
+
+@router.post("/generate-async", status_code=202, response_model=GenerateWorkflowAsyncResponse)
+async def generate_workflow_async(
+    body: GenerateWorkflowRequest,
+    background_tasks: BackgroundTasks,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Create workflow immediately, generate steps in background. Returns 202 so no proxy timeout."""
+    workflow = Workflow(
+        user_id=current_user.id,
+        title=body.goal[:200] + ("..." if len(body.goal) > 200 else ""),
+        goal=body.goal,
+    )
+    db.add(workflow)
+    await db.commit()
+    await db.refresh(workflow)
+    background_tasks.add_task(_generate_workflow_background, workflow.id, body.goal)
+    return GenerateWorkflowAsyncResponse(workflow_id=workflow.id)
 
 
 @router.get("", response_model=list[WorkflowListItem])

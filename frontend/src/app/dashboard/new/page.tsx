@@ -1,12 +1,15 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useAuth } from "@/components/AuthProvider";
 import { Spinner } from "@/components/Spinner";
 import { api, ensureApiConfig, getBackendHealthUrl, BACKEND_HEALTH_URL } from "@/lib/api";
 import { Sidebar } from "@/components/Sidebar";
+
+const POLL_INTERVAL_MS = 2000;
+const POLL_DEADLINE_MS = 120000; // 2 min
 
 export default function NewWorkflowPage() {
   const { user, loading: authLoading } = useAuth();
@@ -17,22 +20,74 @@ export default function NewWorkflowPage() {
   const [successMessage, setSuccessMessage] = useState("");
   const [connectionOk, setConnectionOk] = useState<boolean | null>(null);
   const [backendHealthUrl, setBackendHealthUrl] = useState(BACKEND_HEALTH_URL);
+  const mountedRef = useRef(true);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!goal.trim()) return;
+    const trimmedGoal = goal.trim();
+    if (!trimmedGoal) return;
     setError("");
-    setSuccessMessage("");
     setLoading(true);
     try {
-      const workflow = await api.workflows.generate(goal.trim());
-      setSuccessMessage("Workflow created! Opening…");
-      router.push(`/workflow/${workflow.id}`);
+      let workflowId: number;
+      try {
+        const res = await api.workflows.generateAsync(trimmedGoal);
+        workflowId = res.workflow_id;
+      } catch (asyncErr) {
+        const msg = asyncErr instanceof Error ? asyncErr.message : String(asyncErr);
+        if (msg.includes("Method Not Allowed") || msg.includes("405")) {
+          const workflow = await api.workflows.generate(trimmedGoal);
+          workflowId = workflow.id;
+          if (!mountedRef.current) return;
+          router.push(`/workflow/${workflowId}`);
+          router.refresh();
+          return;
+        }
+        throw asyncErr;
+      }
+      if (!mountedRef.current) return;
+      const deadline = Date.now() + POLL_DEADLINE_MS;
+      while (Date.now() < deadline && mountedRef.current) {
+        const workflow = await api.workflows.get(workflowId);
+        if (!mountedRef.current) return;
+        if (workflow.steps?.length) {
+          router.push(`/workflow/${workflowId}`);
+          router.refresh();
+          return;
+        }
+        await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS));
+      }
+      if (!mountedRef.current) return;
+      router.push(`/workflow/${workflowId}`);
       router.refresh();
     } catch (err) {
+      if (!mountedRef.current) return;
+      try {
+        const list = await api.workflows.list();
+        if (mountedRef.current && list.length > 0) {
+          const sorted = [...list].sort(
+            (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+          );
+          const latest = sorted[0];
+          if (Date.now() - new Date(latest.created_at).getTime() < 120000) {
+            router.push(`/workflow/${latest.id}`);
+            router.refresh();
+            return;
+          }
+        }
+      } catch {
+        // ignore
+      }
       setError(err instanceof Error ? err.message : "Failed to generate workflow");
     } finally {
-      setLoading(false);
+      if (mountedRef.current) setLoading(false);
     }
   };
 
@@ -99,9 +154,8 @@ export default function NewWorkflowPage() {
 
           <form onSubmit={handleSubmit} className="card p-6 space-y-4">
             {successMessage && (
-              <div className="text-sm rounded-lg px-3 py-2 border text-emerald-200 bg-emerald-500/10 border-emerald-500/30 flex items-center gap-2" role="status">
-                <span>✓</span>
-                <span>{successMessage}</span>
+              <div className="text-sm rounded-lg px-3 py-2 border text-emerald-200 bg-emerald-500/10 border-emerald-500/30" role="status">
+                {successMessage}
               </div>
             )}
             {error && (
@@ -114,6 +168,14 @@ export default function NewWorkflowPage() {
                 role="alert"
               >
                 {error}
+                <div className="mt-3 flex flex-wrap items-center gap-2">
+                  <Link
+                    href="/dashboard"
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded bg-primary/20 border border-primary/40 text-primary font-medium hover:bg-primary/30"
+                  >
+                    Open Workflows
+                  </Link>
+                </div>
                 <p className="mt-2 text-slate-300 text-xs">
                   If a new workflow appeared in <Link href="/dashboard" className="text-primary hover:underline font-medium">Workflows</Link>, it was created — open it from there.
                 </p>
@@ -198,7 +260,7 @@ export default function NewWorkflowPage() {
               disabled={loading}
               className="btn-primary w-full"
             >
-              {loading ? "Generating workflow…" : "Generate workflow"}
+              {loading ? "Generating workflow… (may take 1–2 min)" : "Generate workflow"}
             </button>
           </form>
         </div>

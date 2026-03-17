@@ -19,6 +19,11 @@ logger = get_logger(__name__)
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await init_db()
+    if settings.secret_key == "your-secret-key-change-in-production":
+        logger.warning(
+            "SECRET_KEY is the default value; set a strong random SECRET_KEY in production.",
+            extra={"config": "security"},
+        )
     yield
 
 

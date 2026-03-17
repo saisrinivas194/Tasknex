@@ -314,6 +314,13 @@ export const api = {
         body: JSON.stringify({ goal }),
         timeout: 120000,
       }),
+    /** Start async generate (returns 202 + workflow_id). Poll GET /workflows/:id until steps exist. */
+    generateAsync: (goal: string) =>
+      request<{ workflow_id: number }>("/workflows/generate-async", {
+        method: "POST",
+        body: JSON.stringify({ goal }),
+        timeout: 10000,
+      }),
     update: (
       id: number,
       data: {
